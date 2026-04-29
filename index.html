@@ -1,339 +1,498 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GongBi Translator</title>
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    background: #f5f5f5; color: #111;
-    min-height: 100vh;
-    display: flex; flex-direction: column; align-items: center;
-    padding: 40px 20px 80px;
-  }
-  h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.3px; margin-bottom: 28px; }
-  .steps { width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 12px; }
-  .card { background: #fff; border-radius: 14px; padding: 20px 22px; border: 1px solid #e8e8e8; }
-  .step-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-  .badge {
-    width: 26px; height: 26px; border-radius: 50%;
-    background: #e0e0e0; color: #fff;
-    font-size: 12px; font-weight: 700;
-    display: flex; align-items: center; justify-content: center;
-    flex-shrink: 0; transition: background 0.2s;
-  }
-  .badge.active { background: #2563eb; }
-  .badge.done   { background: #16a34a; }
-  .step-title   { font-size: 14px; font-weight: 600; }
-  .dropzone {
-    border: 1.5px dashed #d0d0d0; border-radius: 10px;
-    padding: 28px; text-align: center; cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
-    color: #888; font-size: 13px;
-  }
-  .dropzone:hover, .dropzone.over { border-color: #2563eb; background: #f0f5ff; color: #2563eb; }
-  .dropzone.filled { border-style: solid; border-color: #16a34a; background: #f0fdf4; color: #16a34a; }
-  .dropzone input { display: none; }
-  .btn {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 8px 16px; border-radius: 8px; border: none;
-    font-size: 13px; font-weight: 600; cursor: pointer;
-    transition: background 0.15s, transform 0.1s;
-  }
-  .btn:active { transform: scale(0.97); }
-  .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none; }
-  .btn-primary { background: #2563eb; color: #fff; }
-  .btn-primary:hover:not(:disabled) { background: #1d4ed8; }
-  .btn-green   { background: #16a34a; color: #fff; }
-  .btn-green:hover:not(:disabled)   { background: #15803d; }
-  .btn-row { display: flex; gap: 8px; margin-top: 12px; }
-  textarea {
-    width: 100%; border: 1px solid #e0e0e0; border-radius: 8px;
-    padding: 10px 12px;
-    font-family: "SF Mono", "Fira Code", monospace;
-    font-size: 12px; line-height: 1.6; resize: vertical;
-    outline: none; color: #222; background: #fafafa;
-    transition: border-color 0.15s;
-  }
-  textarea:focus { border-color: #2563eb; background: #fff; }
-  .status { font-size: 12px; margin-top: 10px; min-height: 18px; color: #888; }
-  .status.ok  { color: #16a34a; }
-  .status.err { color: #dc2626; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GongBi Translator</title>
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f5f5;
+      color: #111;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px 80px;
+    }
+
+    h1 {
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: -0.3px;
+      margin-bottom: 28px;
+    }
+
+    .steps {
+      width: 100%;
+      max-width: 560px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 20px 22px;
+      border: 1px solid #e8e8e8;
+    }
+
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .badge {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: #e0e0e0;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.2s;
+    }
+
+    .badge.active {
+      background: #2563eb;
+    }
+
+    .badge.done {
+      background: #16a34a;
+    }
+
+    .step-title {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .dropzone {
+      border: 1.5px dashed #d0d0d0;
+      border-radius: 10px;
+      padding: 28px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      color: #888;
+      font-size: 13px;
+    }
+
+    .dropzone:hover,
+    .dropzone.over {
+      border-color: #2563eb;
+      background: #f0f5ff;
+      color: #2563eb;
+    }
+
+    .dropzone.filled {
+      border-style: solid;
+      border-color: #16a34a;
+      background: #f0fdf4;
+      color: #16a34a;
+    }
+
+    .dropzone input {
+      display: none;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: none;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+    }
+
+    .btn:active {
+      transform: scale(0.97);
+    }
+
+    .btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-primary {
+      background: #2563eb;
+      color: #fff;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #1d4ed8;
+    }
+
+    .btn-green {
+      background: #16a34a;
+      color: #fff;
+    }
+
+    .btn-green:hover:not(:disabled) {
+      background: #15803d;
+    }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    textarea {
+      width: 100%;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 12px;
+      line-height: 1.6;
+      resize: vertical;
+      outline: none;
+      color: #222;
+      background: #fafafa;
+      transition: border-color 0.15s;
+    }
+
+    textarea:focus {
+      border-color: #2563eb;
+      background: #fff;
+    }
+
+    .status {
+      font-size: 12px;
+      margin-top: 10px;
+      min-height: 18px;
+      color: #888;
+    }
+
+    .status.ok {
+      color: #16a34a;
+    }
+
+    .status.err {
+      color: #dc2626;
+    }
+  </style>
 </head>
+
 <body>
 
-<h1>GongBi Translator</h1>
+  <h1>GongBi Translator</h1>
 
-<div class="steps">
+  <div class="steps">
 
-  <!-- Step 1 -->
-  <div class="card">
-    <div class="step-header">
-      <div class="badge active" id="b1">1</div>
-      <span class="step-title">Upload &amp; Extract</span>
+    <!-- Step 1 -->
+    <div class="card">
+      <div class="step-header">
+        <div class="badge active" id="b1">1</div>
+        <span class="step-title">Upload &amp; Extract</span>
+      </div>
+      <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+        <input type="file" id="fileInput" accept=".docx">
+        Drop your .docx here or click to browse
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btnExtract" onclick="doExtract()" disabled>Extract text</button>
+      </div>
+      <div class="status" id="s1"></div>
     </div>
-    <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
-      <input type="file" id="fileInput" accept=".docx">
-      Drop your .docx here or click to browse
+
+    <!-- Step 2 -->
+    <div class="card">
+      <div class="step-header">
+        <div class="badge" id="b2">2</div>
+        <span class="step-title">Paste &amp; Build</span>
+      </div>
+      <textarea id="translatedInput" rows="8" placeholder="Paste the AI's response here…"></textarea>
+      <div class="btn-row">
+        <button class="btn btn-green" id="btnBuild" onclick="doBuild()" disabled>Build translated .docx</button>
+      </div>
+      <div class="status" id="s2"></div>
     </div>
-    <div class="btn-row">
-      <button class="btn btn-primary" id="btnExtract" onclick="doExtract()" disabled>Extract text</button>
-    </div>
-    <div class="status" id="s1"></div>
+
   </div>
 
-  <!-- Step 2 -->
-  <div class="card">
-    <div class="step-header">
-      <div class="badge" id="b2">2</div>
-      <span class="step-title">Paste &amp; Build</span>
-    </div>
-    <textarea id="translatedInput" rows="8" placeholder="Paste the AI's response here…"></textarea>
-    <div class="btn-row">
-      <button class="btn btn-green" id="btnBuild" onclick="doBuild()" disabled>Build translated .docx</button>
-    </div>
-    <div class="status" id="s2"></div>
-  </div>
+  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+  <script>
+    // ── Constants ─────────────────────────────────────────────────────────────────
+    const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+    const XML_NS = "http://www.w3.org/XML/1998/namespace";
+    const RE_ZH = /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/;
 
-</div>
+    const SCAN_PARTS = [
+      "word/document.xml",
+      "word/header1.xml", "word/header2.xml", "word/header3.xml",
+      "word/footer1.xml", "word/footer2.xml", "word/footer3.xml",
+      "word/footnotes.xml", "word/endnotes.xml",
+    ];
 
-<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-<script>
-// ── Constants ─────────────────────────────────────────────────────────────────
-const W      = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-const XML_NS = "http://www.w3.org/XML/1998/namespace";
-const RE_ZH  = /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/;
-
-const SCAN_PARTS = [
-  "word/document.xml",
-  "word/header1.xml", "word/header2.xml", "word/header3.xml",
-  "word/footer1.xml", "word/footer2.xml", "word/footer3.xml",
-  "word/footnotes.xml", "word/endnotes.xml",
-];
-
-const PROMPT =
-`Translate the Chinese text below into English.
+    const PROMPT =
+      `Translate the Chinese text below into English.
 Format: each line is  id|text
 Return ONLY the translated lines in the same id|text format. Do not add explanations or extra lines.
 Each line is a full paragraph — translate it naturally as a whole.
-If a line contains both Chinese and English, translate only the Chinese parts; keep all English words, numbers, and proper nouns exactly as-is.
-Refine grammar so it reads like a native speaker wrote it.
-Capitalize only the first word of a sentence or title.
+
+RULES:
+1. The VERY FIRST word of each line MUST be capitalized.
+2. Use lowercase for ALL technical, medical, and anatomical terms (e.g., "superior temporal gyrus", "primary auditory area") unless they appear at the start of a sentence.
+3. Do NOT capitalize terms for emphasis.
+4. Only capitalize genuine proper nouns (e.g., "Area 41", people's names, or acronyms).
+5. Refine grammar so it reads like a native speaker wrote it.
 
 `;
 
-// ── State ─────────────────────────────────────────────────────────────────────
-let docxBuffer = null;   // ArrayBuffer of uploaded file
+    // ── State ─────────────────────────────────────────────────────────────────────
+    let docxBuffer = null;   // ArrayBuffer of uploaded file
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-function parseXml(str) {
-  return new DOMParser().parseFromString(str, "application/xml");
-}
-
-function serializeXml(doc) {
-  const raw = new XMLSerializer().serializeToString(doc);
-  // Strip any existing XML declaration, prepend standard one
-  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
-       + raw.replace(/^<\?xml[^?]*\?>\s*/i, "");
-}
-
-// Returns array of <w:t> elements for the paragraph if it contains Chinese,
-// otherwise returns empty array. One group = whole paragraph.
-function paraGroup(para) {
-  const ts = Array.from(para.getElementsByTagNameNS(W, "t"))
-               .filter(e => e.textContent !== "");
-  if (!ts.length) return [];
-  if (!RE_ZH.test(ts.map(e => e.textContent).join(""))) return [];
-  return ts;
-}
-
-// ── Core: extract ─────────────────────────────────────────────────────────────
-async function extractRuns(buffer) {
-  const zip    = await JSZip.loadAsync(buffer);
-  const lines  = [];
-  let globalIdx = 0, skipped = 0;
-
-  for (const part of SCAN_PARTS) {
-    if (!zip.files[part]) continue;
-    const doc   = parseXml(await zip.files[part].async("string"));
-    const allT  = Array.from(doc.getElementsByTagNameNS(W, "t"));
-    const posOf = new Map(allT.map((e, i) => [e, i]));
-    const seen  = new Set();
-
-    for (const para of doc.getElementsByTagNameNS(W, "p")) {
-      const group = paraGroup(para);
-      if (!group.length) continue;
-      const firstPos = posOf.get(group[0]);
-      if (firstPos === undefined) continue;
-      lines.push(`${globalIdx + firstPos}|${group.map(e => e.textContent).join("")}`);
-      group.forEach(e => seen.add(posOf.get(e)));
+    // ── Helpers ───────────────────────────────────────────────────────────────────
+    function parseXml(str) {
+      return new DOMParser().parseFromString(str, "application/xml");
     }
 
-    skipped    += allT.length - seen.size;
-    globalIdx  += allT.length;
-  }
-
-  return { text: lines.join("\n"), nGroups: lines.length };
-}
-
-// ── Core: build ───────────────────────────────────────────────────────────────
-async function buildTranslated(buffer, translatedText) {
-  // Parse translation map
-  const tmap = new Map();
-  for (const line of translatedText.split("\n")) {
-    const t = line.trim();
-    const pi = t.indexOf("|");
-    if (pi === -1) continue;
-    const idx = parseInt(t.slice(0, pi).trim(), 10);
-    if (!isNaN(idx)) tmap.set(idx, t.slice(pi + 1).trim());
-  }
-
-  const zip = await JSZip.loadAsync(buffer);
-  let globalIdx = 0;
-
-  for (const part of SCAN_PARTS) {
-    if (!zip.files[part]) continue;
-    const xmlStr = await zip.files[part].async("string");
-    const doc    = parseXml(xmlStr);
-    const allT   = Array.from(doc.getElementsByTagNameNS(W, "t"));
-    const posOf  = new Map(allT.map((e, i) => [e, i]));
-    let replaced = 0;
-
-    for (const para of doc.getElementsByTagNameNS(W, "p")) {
-      const group = paraGroup(para);
-      if (!group.length) continue;
-      const gi = globalIdx + posOf.get(group[0]);
-      if (!tmap.has(gi)) continue;
-      group[0].textContent = tmap.get(gi);
-      group[0].setAttributeNS(XML_NS, "xml:space", "preserve");
-      group.slice(1).forEach(e => { e.textContent = ""; });
-      replaced++;
+    function serializeXml(doc) {
+      const raw = new XMLSerializer().serializeToString(doc);
+      // Strip any existing XML declaration, prepend standard one
+      return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
+        + raw.replace(/^<\?xml[^?]*\?>\s*/i, "");
     }
 
-    globalIdx += allT.length;
-
-    if (replaced > 0) {
-      zip.file(part, serializeXml(doc));
+    // Returns array of <w:t> elements for the paragraph if it contains Chinese,
+    // otherwise returns empty array. One group = whole paragraph.
+    function paraGroup(para) {
+      const ts = Array.from(para.getElementsByTagNameNS(W, "t"))
+        .filter(e => e.textContent !== "");
+      if (!ts.length) return [];
+      if (!RE_ZH.test(ts.map(e => e.textContent).join(""))) return [];
+      return ts;
     }
-  }
 
-  await convertNumbering(zip);
-  return zip.generateAsync({
-    type: "blob",
-    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    compression: "DEFLATE",
-  });
-}
+    // ── Core: extract ─────────────────────────────────────────────────────────────
+    async function extractRuns(buffer) {
+      const zip = await JSZip.loadAsync(buffer);
+      const lines = [];
+      let globalIdx = 0, skipped = 0;
 
-// ── Core: numbering ───────────────────────────────────────────────────────────
-async function convertNumbering(zip) {
-  if (!zip.files["word/numbering.xml"]) return;
-  const doc  = parseXml(await zip.files["word/numbering.xml"].async("string"));
-  let modified = false;
+      for (const part of SCAN_PARTS) {
+        if (!zip.files[part]) continue;
+        const doc = parseXml(await zip.files[part].async("string"));
+        const allT = Array.from(doc.getElementsByTagNameNS(W, "t"));
+        const posOf = new Map(allT.map((e, i) => [e, i]));
+        const seen = new Set();
 
-  for (const lvl of doc.getElementsByTagNameNS(W, "lvl")) {
-    const ilvl   = lvl.getAttributeNS(W, "ilvl") ?? lvl.getAttribute("ilvl") ?? "0";
-    const ltEl   = lvl.getElementsByTagNameNS(W, "lvlText")[0];
-    const nfEl   = lvl.getElementsByTagNameNS(W, "numFmt")[0];
-    const stEl   = lvl.getElementsByTagNameNS(W, "start")[0];
-    const sfEl   = lvl.getElementsByTagNameNS(W, "suff")[0];
-    if (!ltEl) continue;
+        for (const para of doc.getElementsByTagNameNS(W, "p")) {
+          const group = paraGroup(para);
+          if (!group.length) continue;
+          const firstPos = posOf.get(group[0]);
+          if (firstPos === undefined) continue;
+          lines.push(`${globalIdx + firstPos}|${group.map(e => e.textContent).join("")}`);
+          group.forEach(e => seen.add(posOf.get(e)));
+        }
 
-    const val = ltEl.getAttributeNS(W, "val") ?? ltEl.getAttribute("val") ?? "";
-    const n   = (parseInt(ilvl, 10) + 1).toString();
+        skipped += allT.length - seen.size;
+        globalIdx += allT.length;
+      }
 
-    if (val.includes("\u3001")) {                                  // 、 top level
-      ltEl.setAttributeNS(W, "w:val", `%${n}.`);
-      nfEl?.setAttributeNS(W, "w:val", "upperRoman");
-      if (stEl) stEl.setAttributeNS(W, "w:val", "1");
-      if (sfEl) sfEl.setAttributeNS(W, "w:val", "space");
-      modified = true;
-    } else if (val.includes("\uff08") ||                           // （ second level
-               (val.includes("(") && val.includes(")") && val.includes("%"))) {
-      ltEl.setAttributeNS(W, "w:val", `%${n}.`);
-      nfEl?.setAttributeNS(W, "w:val", "lowerLetter");
-      if (stEl) stEl.setAttributeNS(W, "w:val", "1");
-      if (sfEl) sfEl.setAttributeNS(W, "w:val", "space");
-      modified = true;
+      return { text: lines.join("\n"), nGroups: lines.length };
     }
-  }
 
-  if (modified) zip.file("word/numbering.xml", serializeXml(doc));
-}
+    // ── Core: build ───────────────────────────────────────────────────────────────
+    async function buildTranslated(buffer, translatedText) {
+      // Parse translation map
+      const tmap = new Map();
+      for (const line of translatedText.split("\n")) {
+        const t = line.trim();
+        const pi = t.indexOf("|");
+        if (pi === -1) continue;
+        const idx = parseInt(t.slice(0, pi).trim(), 10);
+        if (!isNaN(idx)) tmap.set(idx, t.slice(pi + 1).trim());
+      }
 
-// ── Drop zone ─────────────────────────────────────────────────────────────────
-const dz = document.getElementById("dropzone");
-const fi = document.getElementById("fileInput");
+      const zip = await JSZip.loadAsync(buffer);
+      let globalIdx = 0;
 
-fi.addEventListener("change", () => { if (fi.files[0]) setFile(fi.files[0]); });
-dz.addEventListener("dragover",  e => { e.preventDefault(); dz.classList.add("over"); });
-dz.addEventListener("dragleave", () => dz.classList.remove("over"));
-dz.addEventListener("drop", e => {
-  e.preventDefault(); dz.classList.remove("over");
-  if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
-});
+      for (const part of SCAN_PARTS) {
+        if (!zip.files[part]) continue;
+        const xmlStr = await zip.files[part].async("string");
+        const doc = parseXml(xmlStr);
+        const allT = Array.from(doc.getElementsByTagNameNS(W, "t"));
+        const posOf = new Map(allT.map((e, i) => [e, i]));
+        let replaced = 0;
 
-function setFile(f) {
-  if (!f.name.endsWith(".docx")) { setStatus("s1", "Not a .docx file", "err"); return; }
-  const reader = new FileReader();
-  reader.onload = e => {
-    docxBuffer = e.target.result;
-    dz.textContent = "📄 " + f.name;
-    dz.classList.add("filled");
-    document.getElementById("btnExtract").disabled = false;
-  };
-  reader.readAsArrayBuffer(f);
-}
+        for (const para of doc.getElementsByTagNameNS(W, "p")) {
+          const group = paraGroup(para);
+          if (!group.length) continue;
+          const gi = globalIdx + posOf.get(group[0]);
+          if (!tmap.has(gi)) continue;
 
-// ── Actions ───────────────────────────────────────────────────────────────────
-async function doExtract() {
-  if (!docxBuffer) return;
-  const btn = document.getElementById("btnExtract");
-  btn.disabled = true;
-  setStatus("s1", "Extracting…");
-  try {
-    const { text, nGroups } = await extractRuns(docxBuffer);
-    await navigator.clipboard.writeText(PROMPT + text).catch(() => {});
-    document.getElementById("b1").className = "badge done";
-    document.getElementById("b2").className = "badge active";
-    document.getElementById("btnBuild").disabled = false;
-    setStatus("s1", `✓ ${nGroups} paragraphs extracted — prompt + text copied to clipboard!`, "ok");
-  } catch (e) {
-    setStatus("s1", "Error: " + e.message, "err");
-    btn.disabled = false;
-  }
-}
+          // 1. Update text
+          group[0].textContent = tmap.get(gi);
+          group[0].setAttributeNS(XML_NS, "xml:space", "preserve");
+          group.slice(1).forEach(e => { e.textContent = ""; });
 
-async function doBuild() {
-  const translated = document.getElementById("translatedInput").value.trim();
-  if (!translated) { setStatus("s2", "Paste the translated text first.", "err"); return; }
-  if (!docxBuffer) { setStatus("s2", "Upload a file first (Step 1).", "err"); return; }
-  const btn = document.getElementById("btnBuild");
-  btn.disabled = true;
-  setStatus("s2", "Building…");
-  try {
-    const blob = await buildTranslated(docxBuffer, translated);
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href = url; a.download = "translated.docx";
-    a.click(); URL.revokeObjectURL(url);
-    document.getElementById("b2").className = "badge done";
-    setStatus("s2", "✓ Download started!", "ok");
-  } catch (e) {
-    setStatus("s2", "Error: " + e.message, "err");
-  } finally {
-    btn.disabled = false;
-  }
-}
+          // 2. Set Font to Times New Roman
+          const run = group[0].parentElement;
+          if (run && run.localName === "r") {
+            let rPr = run.getElementsByTagNameNS(W, "rPr")[0];
+            if (!rPr) {
+              rPr = doc.createElementNS(W, "w:rPr");
+              run.insertBefore(rPr, run.firstChild);
+            }
+            let rFonts = rPr.getElementsByTagNameNS(W, "rFonts")[0];
+            if (!rFonts) {
+              rFonts = doc.createElementNS(W, "w:rFonts");
+              rPr.appendChild(rFonts);
+            }
+            rFonts.setAttributeNS(W, "w:ascii", "Times New Roman");
+            rFonts.setAttributeNS(W, "w:hAnsi", "Times New Roman");
+            rFonts.setAttributeNS(W, "w:eastAsia", "Times New Roman");
+            rFonts.setAttributeNS(W, "w:cs", "Times New Roman");
+          }
 
-function setStatus(id, msg, type = "") {
-  const el = document.getElementById(id);
-  el.textContent = msg;
-  el.className = "status " + type;
-}
-</script>
+          replaced++;
+        }
+
+        globalIdx += allT.length;
+
+        if (replaced > 0) {
+          zip.file(part, serializeXml(doc));
+        }
+      }
+
+      await convertNumbering(zip);
+      return zip.generateAsync({
+        type: "blob",
+        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        compression: "DEFLATE",
+      });
+    }
+
+    // ── Core: numbering ───────────────────────────────────────────────────────────
+    async function convertNumbering(zip) {
+      if (!zip.files["word/numbering.xml"]) return;
+      const doc = parseXml(await zip.files["word/numbering.xml"].async("string"));
+      let modified = false;
+
+      for (const lvl of doc.getElementsByTagNameNS(W, "lvl")) {
+        const ilvl = lvl.getAttributeNS(W, "ilvl") ?? lvl.getAttribute("ilvl") ?? "0";
+        const ltEl = lvl.getElementsByTagNameNS(W, "lvlText")[0];
+        const nfEl = lvl.getElementsByTagNameNS(W, "numFmt")[0];
+        const stEl = lvl.getElementsByTagNameNS(W, "start")[0];
+        const sfEl = lvl.getElementsByTagNameNS(W, "suff")[0];
+        if (!ltEl) continue;
+
+        const val = ltEl.getAttributeNS(W, "val") ?? ltEl.getAttribute("val") ?? "";
+        const n = (parseInt(ilvl, 10) + 1).toString();
+
+        if (val.includes("\u3001")) {                                  // 、 top level
+          ltEl.setAttributeNS(W, "w:val", `%${n}.`);
+          nfEl?.setAttributeNS(W, "w:val", "upperRoman");
+          if (stEl) stEl.setAttributeNS(W, "w:val", "1");
+          if (sfEl) sfEl.setAttributeNS(W, "w:val", "space");
+          modified = true;
+        } else if (val.includes("\uff08") ||                           // （ second level
+          (val.includes("(") && val.includes(")") && val.includes("%"))) {
+          ltEl.setAttributeNS(W, "w:val", `%${n}.`);
+          nfEl?.setAttributeNS(W, "w:val", "lowerLetter");
+          if (stEl) stEl.setAttributeNS(W, "w:val", "1");
+          if (sfEl) sfEl.setAttributeNS(W, "w:val", "space");
+          modified = true;
+        }
+      }
+
+      if (modified) zip.file("word/numbering.xml", serializeXml(doc));
+    }
+
+    // ── Drop zone ─────────────────────────────────────────────────────────────────
+    const dz = document.getElementById("dropzone");
+    const fi = document.getElementById("fileInput");
+
+    fi.addEventListener("change", () => { if (fi.files[0]) setFile(fi.files[0]); });
+    dz.addEventListener("dragover", e => { e.preventDefault(); dz.classList.add("over"); });
+    dz.addEventListener("dragleave", () => dz.classList.remove("over"));
+    dz.addEventListener("drop", e => {
+      e.preventDefault(); dz.classList.remove("over");
+      if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
+    });
+
+    function setFile(f) {
+      if (!f.name.endsWith(".docx")) { setStatus("s1", "Not a .docx file", "err"); return; }
+      const reader = new FileReader();
+      reader.onload = e => {
+        docxBuffer = e.target.result;
+        dz.textContent = "📄 " + f.name;
+        dz.classList.add("filled");
+        document.getElementById("btnExtract").disabled = false;
+      };
+      reader.readAsArrayBuffer(f);
+    }
+
+    // ── Actions ───────────────────────────────────────────────────────────────────
+    async function doExtract() {
+      if (!docxBuffer) return;
+      const btn = document.getElementById("btnExtract");
+      btn.disabled = true;
+      setStatus("s1", "Extracting…");
+      try {
+        const { text, nGroups } = await extractRuns(docxBuffer);
+        await navigator.clipboard.writeText(PROMPT + text).catch(() => { });
+        document.getElementById("b1").className = "badge done";
+        document.getElementById("b2").className = "badge active";
+        document.getElementById("btnBuild").disabled = false;
+        setStatus("s1", `✓ ${nGroups} paragraphs extracted — prompt + text copied to clipboard!`, "ok");
+      } catch (e) {
+        setStatus("s1", "Error: " + e.message, "err");
+        btn.disabled = false;
+      }
+    }
+
+    async function doBuild() {
+      const translated = document.getElementById("translatedInput").value.trim();
+      if (!translated) { setStatus("s2", "Paste the translated text first.", "err"); return; }
+      if (!docxBuffer) { setStatus("s2", "Upload a file first (Step 1).", "err"); return; }
+      const btn = document.getElementById("btnBuild");
+      btn.disabled = true;
+      setStatus("s2", "Building…");
+      try {
+        const blob = await buildTranslated(docxBuffer, translated);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = "translated.docx";
+        a.click(); URL.revokeObjectURL(url);
+        document.getElementById("b2").className = "badge done";
+        setStatus("s2", "✓ Download started!", "ok");
+      } catch (e) {
+        setStatus("s2", "Error: " + e.message, "err");
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function setStatus(id, msg, type = "") {
+      const el = document.getElementById(id);
+      el.textContent = msg;
+      el.className = "status " + type;
+    }
+  </script>
 </body>
+
 </html>
