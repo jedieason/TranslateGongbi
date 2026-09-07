@@ -281,20 +281,20 @@ The first input line is FILENAME|original filename.
 Translate the original filename into natural, professional English suitable for a medical textbook or lecture document.
 Preserve meaningful identifiers such as course codes, lecture numbers, dates, edition numbers, and acronyms.
 Do not invent information or add unnecessary words.
-Do not translate the .docx extension.
-Return the translated filename as the FIRST output line in the format FILENAME|English filename.
 Use a concise, descriptive filename with natural English capitalization.
-Do not include the .docx extension in the FILENAME output.
+Do not include the .docx extension in the translated filename.
 Do not include path separators or characters that are invalid in common operating-system filenames.
+Return the translated filename as the FIRST output line in the format FILENAME|English filename.
 
 FORMAT:
-Every remaining input line is in the format id|text.
-Return ONLY the rewritten English lines in the same id|text format.
+Each remaining input line is in the format id|text.
+Return ONLY the translated filename and rewritten English paragraphs.
 Preserve every numeric ID exactly and in the original order.
 Each input line represents a full paragraph. You may restructure the sentences within that paragraph, but do not merge or split lines.
 Do not add explanations, comments, headings, or extra lines.
 Do not insert line breaks within a translated paragraph.
 Do not include the pipe character | inside the translated text.
+The first output line MUST be FILENAME|English filename, followed by the numbered paragraph lines.
 
 CAPITALIZATION:
 1. Capitalize the first word of each line.
