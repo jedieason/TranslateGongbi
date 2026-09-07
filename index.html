@@ -1,14 +1,12 @@
+
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GongBi Translator</title>
   <style>
-    *,
-    *::before,
-    *::after {
+    *, *::before, *::after {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
@@ -69,13 +67,8 @@
       transition: background 0.2s;
     }
 
-    .badge.active {
-      background: #2563eb;
-    }
-
-    .badge.done {
-      background: #16a34a;
-    }
+    .badge.active { background: #2563eb; }
+    .badge.done { background: #16a34a; }
 
     .step-title {
       font-size: 14px;
@@ -93,8 +86,7 @@
       font-size: 13px;
     }
 
-    .dropzone:hover,
-    .dropzone.over {
+    .dropzone:hover, .dropzone.over {
       border-color: #2563eb;
       background: #f0f5ff;
       color: #2563eb;
@@ -107,13 +99,12 @@
       color: #16a34a;
     }
 
-    .dropzone input {
-      display: none;
-    }
+    .dropzone input { display: none; }
 
     .btn {
       display: inline-flex;
       align-items: center;
+      justify-content: center;
       gap: 6px;
       padding: 8px 16px;
       border-radius: 8px;
@@ -124,9 +115,7 @@
       transition: background 0.15s, transform 0.1s;
     }
 
-    .btn:active {
-      transform: scale(0.97);
-    }
+    .btn:active { transform: scale(0.97); }
 
     .btn:disabled {
       opacity: 0.35;
@@ -134,31 +123,19 @@
       transform: none;
     }
 
-    .btn-primary {
-      background: #2563eb;
-      color: #fff;
-    }
-
-    .btn-primary:hover:not(:disabled) {
-      background: #1d4ed8;
-    }
-
-    .btn-green {
-      background: #16a34a;
-      color: #fff;
-    }
-
-    .btn-green:hover:not(:disabled) {
-      background: #15803d;
-    }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: #1d4ed8; }
+    .btn-green { background: #16a34a; color: #fff; }
+    .btn-green:hover:not(:disabled) { background: #15803d; }
 
     .btn-row {
       display: flex;
       gap: 8px;
       margin-top: 12px;
+      flex-wrap: wrap;
     }
 
-    textarea {
+    textarea, .text-input {
       width: 100%;
       border: 1px solid #e0e0e0;
       border-radius: 8px;
@@ -166,16 +143,32 @@
       font-family: "SF Mono", "Fira Code", monospace;
       font-size: 12px;
       line-height: 1.6;
-      resize: vertical;
       outline: none;
       color: #222;
       background: #fafafa;
       transition: border-color 0.15s;
     }
 
-    textarea:focus {
+    textarea { resize: vertical; }
+
+    textarea:focus, .text-input:focus {
       border-color: #2563eb;
       background: #fff;
+    }
+
+    .field-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 600;
+      margin: 14px 0 6px;
+      color: #555;
+    }
+
+    .hint {
+      font-size: 11px;
+      line-height: 1.5;
+      color: #888;
+      margin-top: 6px;
     }
 
     .status {
@@ -183,37 +176,39 @@
       margin-top: 10px;
       min-height: 18px;
       color: #888;
+      line-height: 1.5;
     }
 
-    .status.ok {
-      color: #16a34a;
-    }
+    .status.ok { color: #16a34a; }
+    .status.err { color: #dc2626; }
 
-    .status.err {
-      color: #dc2626;
+    .file-name {
+      overflow-wrap: anywhere;
+      font-weight: 500;
     }
   </style>
 </head>
 
 <body>
-
   <h1>GongBi Translator</h1>
 
   <div class="steps">
-
     <!-- Step 1 -->
     <div class="card">
       <div class="step-header">
         <div class="badge active" id="b1">1</div>
         <span class="step-title">Upload &amp; Extract</span>
       </div>
-      <div class="dropzone" id="dropzone" onclick="document.getElementById('fileInput').click()">
+
+      <div class="dropzone" id="dropzone">
         <input type="file" id="fileInput" accept=".docx">
-        Drop your .docx here or click to browse
+        <span id="dropzoneText">Drop your .docx here or click to browse</span>
       </div>
+
       <div class="btn-row">
-        <button class="btn btn-primary" id="btnExtract" onclick="doExtract()" disabled>Extract text</button>
+        <button class="btn btn-primary" id="btnExtract" disabled>Extract text</button>
       </div>
+
       <div class="status" id="s1"></div>
     </div>
 
@@ -223,18 +218,32 @@
         <div class="badge" id="b2">2</div>
         <span class="step-title">Paste &amp; Build</span>
       </div>
+
       <textarea id="translatedInput" rows="8" placeholder="Paste the AI's response here…"></textarea>
-      <div class="btn-row">
-        <button class="btn btn-green" id="btnBuild" onclick="doBuild()" disabled>Build translated .docx</button>
+
+      <label class="field-label" for="outputFilename">English download filename</label>
+      <input
+        class="text-input"
+        id="outputFilename"
+        type="text"
+        placeholder="The AI-translated filename will appear here"
+        autocomplete="off"
+      >
+      <div class="hint">
+        Automatically extracted from the FILENAME line. You can edit it before downloading.
       </div>
+
+      <div class="btn-row">
+        <button class="btn btn-green" id="btnBuild" disabled>Build translated .docx</button>
+      </div>
+
       <div class="status" id="s2"></div>
     </div>
-
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
   <script>
-    // ── Constants ─────────────────────────────────────────────────────────────────
+    // ── Constants ────────────────────────────────────────────────────────────────
     const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
     const XML_NS = "http://www.w3.org/XML/1998/namespace";
     const RE_ZH = /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/;
@@ -243,41 +252,113 @@
       "word/document.xml",
       "word/header1.xml", "word/header2.xml", "word/header3.xml",
       "word/footer1.xml", "word/footer2.xml", "word/footer3.xml",
-      "word/footnotes.xml", "word/endnotes.xml",
+      "word/footnotes.xml", "word/endnotes.xml"
     ];
 
-    const PROMPT =
-      `Translate the Chinese text below into English.
-Format: each line is  id|text
-Return ONLY the translated lines in the same id|text format. Do not add explanations or extra lines.
-Each line is a full paragraph — translate it naturally as a whole.
+    const PROMPT = `You are an expert English-language medical textbook editor and translator.
 
-RULES:
-1. The VERY FIRST word of each line MUST be capitalized.
-2. Use lowercase for ALL technical, medical, and anatomical terms (e.g., "superior temporal gyrus", "primary auditory area") unless they appear at the start of a sentence.
-3. Do NOT capitalize terms for emphasis.
-4. Only capitalize genuine proper nouns (e.g., "Area 41", people's names, or acronyms).
-5. Refine grammar so it reads like a native speaker wrote it.
+Your task is to transform the Chinese source text into polished, publication-quality English that reads as though it were originally written by a native English-speaking medical textbook author.
 
+PRIMARY OBJECTIVE:
+Prioritize natural English expression, idiomatic academic wording, and clear sentence structure over literal correspondence to the Chinese. Translate the meaning, not the syntax. Do not produce English that sounds translated.
+
+WRITING STANDARD:
+- Write in fluent, precise, professional textbook English.
+- Freely restructure sentences, change clause order, combine or split sentences, and replace Chinese-style expressions with natural English equivalents.
+- Prefer established medical and scientific terminology and conventional textbook phrasing.
+- Use clear, direct prose rather than awkwardly formal, verbose, or mechanically literal language.
+- Preserve the original meaning, level of detail, and degree of certainty. Do not add unsupported facts, explanations, or interpretations.
+- Do not omit medically or scientifically important information.
+- Maintain logical relationships, including cause and effect, contrast, conditions, and qualifications.
+- Where the Chinese is repetitive or unnatural, improve the expression without losing substantive content.
+- Preserve the intended function of the text: headings should read like textbook headings, definitions like definitions, and explanatory paragraphs like coherent textbook prose.
+
+EDITORIAL APPROACH:
+First understand what the source is communicating. Then express that meaning in the way a native English-speaking textbook author would naturally write it. Do not translate word by word or imitate Chinese grammar. Before finalizing, silently review the English for fluency, clarity, terminology, and fidelity.
+
+FILENAME:
+The first input line is FILENAME|original filename.
+Translate the original filename into natural, professional English suitable for a medical textbook or lecture document.
+Preserve meaningful identifiers such as course codes, lecture numbers, dates, edition numbers, and acronyms.
+Do not invent information or add unnecessary words.
+Do not translate the .docx extension.
+Return the translated filename as the FIRST output line in the format FILENAME|English filename.
+Use a concise, descriptive filename with natural English capitalization.
+Do not include the .docx extension in the FILENAME output.
+Do not include path separators or characters that are invalid in common operating-system filenames.
+
+FORMAT:
+Every remaining input line is in the format id|text.
+Return ONLY the rewritten English lines in the same id|text format.
+Preserve every numeric ID exactly and in the original order.
+Each input line represents a full paragraph. You may restructure the sentences within that paragraph, but do not merge or split lines.
+Do not add explanations, comments, headings, or extra lines.
+Do not insert line breaks within a translated paragraph.
+Do not include the pipe character | inside the translated text.
+
+CAPITALIZATION:
+1. Capitalize the first word of each line.
+2. Use standard English sentence capitalization.
+3. Use lowercase for technical, medical, and anatomical terms unless they begin a sentence or are genuine proper nouns.
+4. Do not capitalize terms for emphasis.
+5. Preserve conventional capitalization of proper nouns, eponyms, acronyms, and established nomenclature.
+
+SOURCE TEXT:
 `;
 
-    // ── State ─────────────────────────────────────────────────────────────────────
-    let docxBuffer = null;   // ArrayBuffer of uploaded file
+    // ── State ────────────────────────────────────────────────────────────────────
+    let docxBuffer = null;
+    let originalFilename = "";
+    let extractedIds = new Set();
+    let filenameWasEdited = false;
 
-    // ── Helpers ───────────────────────────────────────────────────────────────────
+    // ── Helpers ──────────────────────────────────────────────────────────────────
     function parseXml(str) {
-      return new DOMParser().parseFromString(str, "application/xml");
+      const doc = new DOMParser().parseFromString(str, "application/xml");
+      if (doc.getElementsByTagName("parsererror").length) {
+        throw new Error("The DOCX contains invalid XML.");
+      }
+      return doc;
     }
 
     function serializeXml(doc) {
       const raw = new XMLSerializer().serializeToString(doc);
-      // Strip any existing XML declaration, prepend standard one
       return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
         + raw.replace(/^<\?xml[^?]*\?>\s*/i, "");
     }
 
-    // Returns array of <w:t> elements for the paragraph if it contains Chinese,
-    // otherwise returns empty array. One group = whole paragraph.
+    function stripDocxExtension(name) {
+      return name.replace(/\.docx$/i, "");
+    }
+
+    function sanitizeFilename(name) {
+      let clean = String(name || "")
+        .replace(/\.docx$/i, "")
+        .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "")
+        .replace(/\s+/g, " ")
+        .replace(/[. ]+$/g, "")
+        .trim();
+
+      if (!clean || clean === "." || clean === "..") {
+        clean = "Translated Document";
+      }
+
+      // Avoid reserved Windows device names.
+      if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(clean)) {
+        clean = "_" + clean;
+      }
+
+      return clean + ".docx";
+    }
+
+    function setStatus(id, msg, type = "") {
+      const el = document.getElementById(id);
+      el.textContent = msg;
+      el.className = "status " + type;
+    }
+
+    // Returns all nonempty text elements in a paragraph if it contains Chinese.
+    // One group = one whole paragraph.
     function paraGroup(para) {
       const ts = Array.from(para.getElementsByTagNameNS(W, "t"))
         .filter(e => e.textContent !== "");
@@ -286,54 +367,72 @@ RULES:
       return ts;
     }
 
-    // ── Core: extract ─────────────────────────────────────────────────────────────
-    async function extractRuns(buffer) {
-      const zip = await JSZip.loadAsync(buffer);
-      const lines = [];
-      let globalIdx = 0, skipped = 0;
-
-      for (const part of SCAN_PARTS) {
-        if (!zip.files[part]) continue;
-        const doc = parseXml(await zip.files[part].async("string"));
-        const allT = Array.from(doc.getElementsByTagNameNS(W, "t"));
-        const posOf = new Map(allT.map((e, i) => [e, i]));
-        const seen = new Set();
-
-        for (const para of doc.getElementsByTagNameNS(W, "p")) {
-          const group = paraGroup(para);
-          if (!group.length) continue;
-          const firstPos = posOf.get(group[0]);
-          if (firstPos === undefined) continue;
-          lines.push(`${globalIdx + firstPos}|${group.map(e => e.textContent).join("")}`);
-          group.forEach(e => seen.add(posOf.get(e)));
-        }
-
-        skipped += allT.length - seen.size;
-        globalIdx += allT.length;
-      }
-
-      return { text: lines.join("\n"), nGroups: lines.length };
-    }
-
-    // ── Core: build ───────────────────────────────────────────────────────────────
-    async function buildTranslated(buffer, translatedText) {
-      // Parse translation map
+    function parseTranslationResponse(raw) {
       const tmap = new Map();
-      for (const line of translatedText.split("\n")) {
+      let filename = "";
+
+      for (const line of raw.split(/\r?\n/)) {
         const t = line.trim();
         const pi = t.indexOf("|");
         if (pi === -1) continue;
-        const idx = parseInt(t.slice(0, pi).trim(), 10);
-        if (!isNaN(idx)) tmap.set(idx, t.slice(pi + 1).trim());
+
+        const key = t.slice(0, pi).trim();
+        const value = t.slice(pi + 1).trim();
+
+        if (key.toUpperCase() === "FILENAME") {
+          if (value) filename = value;
+          continue;
+        }
+
+        if (!/^\d+$/.test(key)) continue;
+        if (value) tmap.set(Number(key), value);
       }
 
+      return { filename, tmap };
+    }
+
+    // ── Core: extract ────────────────────────────────────────────────────────────
+    async function extractRuns(buffer) {
       const zip = await JSZip.loadAsync(buffer);
+      const lines = [];
+      const ids = new Set();
       let globalIdx = 0;
 
       for (const part of SCAN_PARTS) {
         if (!zip.files[part]) continue;
-        const xmlStr = await zip.files[part].async("string");
-        const doc = parseXml(xmlStr);
+
+        const doc = parseXml(await zip.files[part].async("string"));
+        const allT = Array.from(doc.getElementsByTagNameNS(W, "t"));
+        const posOf = new Map(allT.map((e, i) => [e, i]));
+
+        for (const para of doc.getElementsByTagNameNS(W, "p")) {
+          const group = paraGroup(para);
+          if (!group.length) continue;
+
+          const firstPos = posOf.get(group[0]);
+          if (firstPos === undefined) continue;
+
+          const id = globalIdx + firstPos;
+          ids.add(id);
+          lines.push(`${id}|${group.map(e => e.textContent).join("")}`);
+        }
+
+        globalIdx += allT.length;
+      }
+
+      return { text: lines.join("\n"), nGroups: lines.length, ids };
+    }
+
+    // ── Core: build ──────────────────────────────────────────────────────────────
+    async function buildTranslated(buffer, tmap) {
+      const zip = await JSZip.loadAsync(buffer);
+      let globalIdx = 0;
+      let replacedTotal = 0;
+
+      for (const part of SCAN_PARTS) {
+        if (!zip.files[part]) continue;
+
+        const doc = parseXml(await zip.files[part].async("string"));
         const allT = Array.from(doc.getElementsByTagNameNS(W, "t"));
         const posOf = new Map(allT.map((e, i) => [e, i]));
         let replaced = 0;
@@ -341,27 +440,34 @@ RULES:
         for (const para of doc.getElementsByTagNameNS(W, "p")) {
           const group = paraGroup(para);
           if (!group.length) continue;
+
           const gi = globalIdx + posOf.get(group[0]);
           if (!tmap.has(gi)) continue;
 
-          // 1. Update text
+          // 1. Replace the paragraph text.
           group[0].textContent = tmap.get(gi);
           group[0].setAttributeNS(XML_NS, "xml:space", "preserve");
           group.slice(1).forEach(e => { e.textContent = ""; });
 
-          // 2. Set Font to Times New Roman
+          // 2. Set the first text run's font to Times New Roman.
           const run = group[0].parentElement;
           if (run && run.localName === "r") {
-            let rPr = run.getElementsByTagNameNS(W, "rPr")[0];
+            let rPr = Array.from(run.children)
+              .find(e => e.namespaceURI === W && e.localName === "rPr");
+
             if (!rPr) {
               rPr = doc.createElementNS(W, "w:rPr");
               run.insertBefore(rPr, run.firstChild);
             }
-            let rFonts = rPr.getElementsByTagNameNS(W, "rFonts")[0];
+
+            let rFonts = Array.from(rPr.children)
+              .find(e => e.namespaceURI === W && e.localName === "rFonts");
+
             if (!rFonts) {
               rFonts = doc.createElementNS(W, "w:rFonts");
               rPr.appendChild(rFonts);
             }
+
             rFonts.setAttributeNS(W, "w:ascii", "Times New Roman");
             rFonts.setAttributeNS(W, "w:hAnsi", "Times New Roman");
             rFonts.setAttributeNS(W, "w:eastAsia", "Times New Roman");
@@ -375,20 +481,25 @@ RULES:
 
         if (replaced > 0) {
           zip.file(part, serializeXml(doc));
+          replacedTotal += replaced;
         }
       }
 
       await convertNumbering(zip);
-      return zip.generateAsync({
+
+      const blob = await zip.generateAsync({
         type: "blob",
         mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        compression: "DEFLATE",
+        compression: "DEFLATE"
       });
+
+      return { blob, replacedTotal };
     }
 
-    // ── Core: numbering ───────────────────────────────────────────────────────────
+    // ── Core: numbering ──────────────────────────────────────────────────────────
     async function convertNumbering(zip) {
       if (!zip.files["word/numbering.xml"]) return;
+
       const doc = parseXml(await zip.files["word/numbering.xml"].async("string"));
       let modified = false;
 
@@ -403,14 +514,16 @@ RULES:
         const val = ltEl.getAttributeNS(W, "val") ?? ltEl.getAttribute("val") ?? "";
         const n = (parseInt(ilvl, 10) + 1).toString();
 
-        if (val.includes("\u3001")) {                                  // 、 top level
+        if (val.includes("\u3001")) {
           ltEl.setAttributeNS(W, "w:val", `%${n}.`);
           nfEl?.setAttributeNS(W, "w:val", "upperRoman");
           if (stEl) stEl.setAttributeNS(W, "w:val", "1");
           if (sfEl) sfEl.setAttributeNS(W, "w:val", "space");
           modified = true;
-        } else if (val.includes("\uff08") ||                           // （ second level
-          (val.includes("(") && val.includes(")") && val.includes("%"))) {
+        } else if (
+          val.includes("\uff08") ||
+          (val.includes("(") && val.includes(")") && val.includes("%"))
+        ) {
           ltEl.setAttributeNS(W, "w:val", `%${n}.`);
           nfEl?.setAttributeNS(W, "w:val", "lowerLetter");
           if (stEl) stEl.setAttributeNS(W, "w:val", "1");
@@ -422,77 +535,176 @@ RULES:
       if (modified) zip.file("word/numbering.xml", serializeXml(doc));
     }
 
-    // ── Drop zone ─────────────────────────────────────────────────────────────────
+    // ── Drop zone ────────────────────────────────────────────────────────────────
     const dz = document.getElementById("dropzone");
     const fi = document.getElementById("fileInput");
+    const translatedInput = document.getElementById("translatedInput");
+    const outputFilename = document.getElementById("outputFilename");
 
-    fi.addEventListener("change", () => { if (fi.files[0]) setFile(fi.files[0]); });
-    dz.addEventListener("dragover", e => { e.preventDefault(); dz.classList.add("over"); });
-    dz.addEventListener("dragleave", () => dz.classList.remove("over"));
+    dz.addEventListener("click", () => fi.click());
+
+    fi.addEventListener("change", () => {
+      if (fi.files[0]) setFile(fi.files[0]);
+    });
+
+    dz.addEventListener("dragover", e => {
+      e.preventDefault();
+      dz.classList.add("over");
+    });
+
+    dz.addEventListener("dragleave", () => {
+      dz.classList.remove("over");
+    });
+
     dz.addEventListener("drop", e => {
-      e.preventDefault(); dz.classList.remove("over");
+      e.preventDefault();
+      dz.classList.remove("over");
       if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
     });
 
     function setFile(f) {
-      if (!f.name.endsWith(".docx")) { setStatus("s1", "Not a .docx file", "err"); return; }
+      if (!/\.docx$/i.test(f.name)) {
+        setStatus("s1", "Not a .docx file", "err");
+        return;
+      }
+
       const reader = new FileReader();
+
       reader.onload = e => {
         docxBuffer = e.target.result;
-        dz.textContent = "📄 " + f.name;
+        originalFilename = f.name;
+        extractedIds = new Set();
+        filenameWasEdited = false;
+
+        document.getElementById("dropzoneText").textContent = "📄 " + f.name;
         dz.classList.add("filled");
+
+        translatedInput.value = "";
+        outputFilename.value = "";
         document.getElementById("btnExtract").disabled = false;
+        document.getElementById("btnBuild").disabled = true;
+        document.getElementById("b1").className = "badge active";
+        document.getElementById("b2").className = "badge";
+
+        setStatus("s1", "");
+        setStatus("s2", "");
       };
+
       reader.readAsArrayBuffer(f);
     }
 
-    // ── Actions ───────────────────────────────────────────────────────────────────
+    // ── Filename auto-detection ──────────────────────────────────────────────────
+    translatedInput.addEventListener("input", () => {
+      const { filename } = parseTranslationResponse(translatedInput.value);
+
+      if (filename && !filenameWasEdited) {
+        outputFilename.value = stripDocxExtension(filename);
+      }
+    });
+
+    outputFilename.addEventListener("input", () => {
+      filenameWasEdited = true;
+    });
+
+    // ── Actions ──────────────────────────────────────────────────────────────────
+    document.getElementById("btnExtract").addEventListener("click", doExtract);
+    document.getElementById("btnBuild").addEventListener("click", doBuild);
+
     async function doExtract() {
       if (!docxBuffer) return;
+
       const btn = document.getElementById("btnExtract");
       btn.disabled = true;
       setStatus("s1", "Extracting…");
+
       try {
-        const { text, nGroups } = await extractRuns(docxBuffer);
-        await navigator.clipboard.writeText(PROMPT + text).catch(() => { });
+        const { text, nGroups, ids } = await extractRuns(docxBuffer);
+        extractedIds = ids;
+
+        const promptText = PROMPT
+          + "FILENAME|" + stripDocxExtension(originalFilename) + "\n"
+          + text;
+
+        let copied = false;
+        try {
+          await navigator.clipboard.writeText(promptText);
+          copied = true;
+        } catch (_) {
+          // Clipboard may be unavailable outside a secure context.
+        }
+
         document.getElementById("b1").className = "badge done";
         document.getElementById("b2").className = "badge active";
         document.getElementById("btnBuild").disabled = false;
-        setStatus("s1", `✓ ${nGroups} paragraphs extracted — prompt + text copied to clipboard!`, "ok");
+
+        if (copied) {
+          setStatus("s1", `✓ ${nGroups} paragraphs extracted — prompt, filename, and text copied to clipboard!`, "ok");
+        } else {
+          setStatus("s1", `✓ ${nGroups} paragraphs extracted, but clipboard access was denied. Please allow clipboard access and try again.`, "err");
+        }
       } catch (e) {
         setStatus("s1", "Error: " + e.message, "err");
+      } finally {
         btn.disabled = false;
       }
     }
 
     async function doBuild() {
-      const translated = document.getElementById("translatedInput").value.trim();
-      if (!translated) { setStatus("s2", "Paste the translated text first.", "err"); return; }
-      if (!docxBuffer) { setStatus("s2", "Upload a file first (Step 1).", "err"); return; }
+      const translated = translatedInput.value.trim();
+
+      if (!translated) {
+        setStatus("s2", "Paste the translated text first.", "err");
+        return;
+      }
+
+      if (!docxBuffer) {
+        setStatus("s2", "Upload a file first (Step 1).", "err");
+        return;
+      }
+
+      const { filename, tmap } = parseTranslationResponse(translated);
+
+      if (tmap.size === 0 && extractedIds.size > 0) {
+        setStatus("s2", "No valid translated paragraph lines were found. Expected id|text.", "err");
+        return;
+      }
+
+      // Use the editable field first, then the AI filename, then the original.
+      const chosenName = outputFilename.value.trim()
+        || filename
+        || stripDocxExtension(originalFilename);
+
+      const downloadName = sanitizeFilename(chosenName);
+
       const btn = document.getElementById("btnBuild");
       btn.disabled = true;
       setStatus("s2", "Building…");
+
       try {
-        const blob = await buildTranslated(docxBuffer, translated);
+        const { blob, replacedTotal } = await buildTranslated(docxBuffer, tmap);
+
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
-        a.href = url; a.download = "translated.docx";
-        a.click(); URL.revokeObjectURL(url);
+        a.href = url;
+        a.download = downloadName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+
         document.getElementById("b2").className = "badge done";
-        setStatus("s2", "✓ Download started!", "ok");
+        setStatus(
+          "s2",
+          `✓ ${replacedTotal} paragraphs replaced. Download started: ${downloadName}`,
+          "ok"
+        );
       } catch (e) {
         setStatus("s2", "Error: " + e.message, "err");
       } finally {
         btn.disabled = false;
       }
     }
-
-    function setStatus(id, msg, type = "") {
-      const el = document.getElementById(id);
-      el.textContent = msg;
-      el.className = "status " + type;
-    }
   </script>
 </body>
-
 </html>
