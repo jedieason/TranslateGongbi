@@ -1,261 +1,414 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>GongBi Translator</title>
-  <style>
-    *, *::before, *::after {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GongBi Translator</title>
 
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f5f5f5;
-      color: #111;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 40px 20px 80px;
-    }
+<style>
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
-    h1 {
-      font-size: 18px;
-      font-weight: 600;
-      letter-spacing: -0.3px;
-      margin-bottom: 28px;
-    }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #f5f5f5;
+  color: #111;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 20px 80px;
+}
 
-    .steps {
-      width: 100%;
-      max-width: 560px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
+h1 {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  margin-bottom: 28px;
+}
 
-    .card {
-      background: #fff;
-      border-radius: 14px;
-      padding: 20px 22px;
-      border: 1px solid #e8e8e8;
-    }
+.steps {
+  width: 100%;
+  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 
-    .step-header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 14px;
-    }
+.card {
+  background: #fff;
+  border-radius: 14px;
+  padding: 20px 22px;
+  border: 1px solid #e8e8e8;
+}
 
-    .badge {
-      width: 26px;
-      height: 26px;
-      border-radius: 50%;
-      background: #e0e0e0;
-      color: #fff;
-      font-size: 12px;
-      font-weight: 700;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      flex-shrink: 0;
-      transition: background 0.2s;
-    }
+.step-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
 
-    .badge.active { background: #2563eb; }
-    .badge.done { background: #16a34a; }
+.badge {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #e0e0e0;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
 
-    .step-title {
-      font-size: 14px;
-      font-weight: 600;
-    }
+.badge.active { background: #2563eb; }
+.badge.done { background: #16a34a; }
 
-    .dropzone {
-      border: 1.5px dashed #d0d0d0;
-      border-radius: 10px;
-      padding: 28px;
-      text-align: center;
-      cursor: pointer;
-      transition: border-color 0.15s, background 0.15s;
-      color: #888;
-      font-size: 13px;
-    }
+.step-title {
+  font-size: 14px;
+  font-weight: 600;
+}
 
-    .dropzone:hover, .dropzone.over {
-      border-color: #2563eb;
-      background: #f0f5ff;
-      color: #2563eb;
-    }
+.dropzone {
+  border: 1.5px dashed #d0d0d0;
+  border-radius: 10px;
+  padding: 28px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  color: #888;
+  font-size: 13px;
+}
 
-    .dropzone.filled {
-      border-style: solid;
-      border-color: #16a34a;
-      background: #f0fdf4;
-      color: #16a34a;
-    }
+.dropzone:hover, .dropzone.over {
+  border-color: #2563eb;
+  background: #f0f5ff;
+  color: #2563eb;
+}
 
-    .dropzone input { display: none; }
+.dropzone.filled {
+  border-style: solid;
+  border-color: #16a34a;
+  background: #f0fdf4;
+  color: #16a34a;
+}
 
-    .btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      padding: 8px 16px;
-      border-radius: 8px;
-      border: none;
-      font-size: 13px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.15s, transform 0.1s;
-    }
+.dropzone input { display: none; }
 
-    .btn:active { transform: scale(0.97); }
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
 
-    .btn:disabled {
-      opacity: 0.35;
-      cursor: not-allowed;
-      transform: none;
-    }
+.btn:active { transform: scale(0.97); }
 
-    .btn-primary { background: #2563eb; color: #fff; }
-    .btn-primary:hover:not(:disabled) { background: #1d4ed8; }
-    .btn-green { background: #16a34a; color: #fff; }
-    .btn-green:hover:not(:disabled) { background: #15803d; }
+.btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none;
+}
 
-    .btn-row {
-      display: flex;
-      gap: 8px;
-      margin-top: 12px;
-      flex-wrap: wrap;
-    }
+.btn-primary { background: #2563eb; color: #fff; }
+.btn-primary:hover:not(:disabled) { background: #1d4ed8; }
 
-    textarea, .text-input {
-      width: 100%;
-      border: 1px solid #e0e0e0;
-      border-radius: 8px;
-      padding: 10px 12px;
-      font-family: "SF Mono", "Fira Code", monospace;
-      font-size: 12px;
-      line-height: 1.6;
-      outline: none;
-      color: #222;
-      background: #fafafa;
-      transition: border-color 0.15s;
-    }
+.btn-green { background: #16a34a; color: #fff; }
+.btn-green:hover:not(:disabled) { background: #15803d; }
 
-    textarea { resize: vertical; }
+.btn-secondary {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #e5e7eb;
+}
 
-    textarea:focus, .text-input:focus {
-      border-color: #2563eb;
-      background: #fff;
-    }
+.btn-secondary:hover:not(:disabled) { background: #e5e7eb; }
 
-    .field-label {
-      display: block;
-      font-size: 12px;
-      font-weight: 600;
-      margin: 14px 0 6px;
-      color: #555;
-    }
+.btn-danger {
+  background: #dc2626;
+  color: #fff;
+}
 
-    .hint {
-      font-size: 11px;
-      line-height: 1.5;
-      color: #888;
-      margin-top: 6px;
-    }
+.btn-danger:hover:not(:disabled) { background: #b91c1c; }
 
-    .status {
-      font-size: 12px;
-      margin-top: 10px;
-      min-height: 18px;
-      color: #888;
-      line-height: 1.5;
-    }
+.btn-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
 
-    .status.ok { color: #16a34a; }
-    .status.err { color: #dc2626; }
+textarea, .text-input {
+  width: 100%;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  outline: none;
+  color: #222;
+  background: #fafafa;
+  transition: border-color 0.15s;
+}
 
-    .file-name {
-      overflow-wrap: anywhere;
-      font-weight: 500;
-    }
-  </style>
+textarea { resize: vertical; }
+
+textarea:focus, .text-input:focus {
+  border-color: #2563eb;
+  background: #fff;
+}
+
+.field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  margin: 14px 0 6px;
+  color: #555;
+}
+
+.hint {
+  font-size: 11px;
+  line-height: 1.5;
+  color: #888;
+  margin-top: 6px;
+}
+
+.status {
+  font-size: 12px;
+  margin-top: 10px;
+  min-height: 18px;
+  color: #888;
+  line-height: 1.5;
+}
+
+.status.ok { color: #16a34a; }
+.status.err { color: #dc2626; }
+
+.file-name {
+  overflow-wrap: anywhere;
+  font-weight: 500;
+}
+
+/* ── Translation validation ─────────────────────────────────── */
+
+.validation-summary {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #6b7280;
+  margin-top: 10px;
+}
+
+.validation-summary.ok { color: #15803d; }
+.validation-summary.err { color: #dc2626; }
+
+.warning-panel {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #fecaca;
+  border-radius: 10px;
+  background: #fef2f2;
+}
+
+.warning-panel[hidden] { display: none; }
+
+.warning-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #b91c1c;
+  margin-bottom: 8px;
+}
+
+.warning-text {
+  font-size: 12px;
+  line-height: 1.6;
+  color: #991b1b;
+}
+
+.warning-ids {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #fecaca;
+  border-radius: 7px;
+  background: #fff;
+  font-family: "SF Mono", "Fira Code", monospace;
+  font-size: 11px;
+  line-height: 1.7;
+  color: #991b1b;
+  overflow-wrap: anywhere;
+  max-height: 100px;
+  overflow-y: auto;
+}
+
+.warning-panel .btn-row { margin-top: 14px; }
+
+.warning-panel .btn-secondary {
+  background: #fff;
+  border-color: #fecaca;
+  color: #991b1b;
+}
+
+.warning-panel .btn-secondary:hover:not(:disabled) {
+  background: #fee2e2;
+}
+
+.warning-note {
+  margin-top: 10px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: #991b1b;
+}
+
+@media (max-width: 480px) {
+  body { padding: 24px 12px 60px; }
+  .card { padding: 18px 16px; }
+  .btn-row .btn { flex: 1 1 auto; justify-content: center; }
+}
+</style>
 </head>
 
 <body>
-  <h1>GongBi Translator</h1>
 
-  <div class="steps">
-    <!-- Step 1 -->
-    <div class="card">
-      <div class="step-header">
-        <div class="badge active" id="b1">1</div>
-        <span class="step-title">Upload &amp; Extract</span>
-      </div>
+<h1>GongBi Translator</h1>
 
-      <div class="dropzone" id="dropzone">
-        <input type="file" id="fileInput" accept=".docx">
-        <span id="dropzoneText">Drop your .docx here or click to browse</span>
-      </div>
+<div class="steps">
 
-      <div class="btn-row">
-        <button class="btn btn-primary" id="btnExtract" disabled>Extract text</button>
-      </div>
-
-      <div class="status" id="s1"></div>
+  <!-- Step 1 -->
+  <div class="card">
+    <div class="step-header">
+      <div class="badge active" id="b1">1</div>
+      <span class="step-title">Upload &amp; Extract</span>
     </div>
 
-    <!-- Step 2 -->
-    <div class="card">
-      <div class="step-header">
-        <div class="badge" id="b2">2</div>
-        <span class="step-title">Paste &amp; Build</span>
+    <div class="dropzone" id="dropzone">
+      <input type="file" id="fileInput" accept=".docx">
+      <span id="dropzoneText">Drop your .docx here or click to browse</span>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btnExtract" disabled>
+        Extract text
+      </button>
+    </div>
+
+    <div class="status" id="s1"></div>
+  </div>
+
+  <!-- Step 2 -->
+  <div class="card">
+    <div class="step-header">
+      <div class="badge" id="b2">2</div>
+      <span class="step-title">Paste &amp; Build</span>
+    </div>
+
+    <textarea
+      id="translatedInput"
+      rows="8"
+      placeholder="Paste the AI's response here…"
+    ></textarea>
+
+    <div class="hint">
+      You can append multiple AI responses. Blank lines are ignored, and
+      the last nonempty translation for each ID wins.
+    </div>
+
+    <label class="field-label" for="outputFilename">
+      English download filename
+    </label>
+
+    <input
+      class="text-input"
+      id="outputFilename"
+      type="text"
+      placeholder="The AI-translated filename will appear here"
+      autocomplete="off"
+    >
+
+    <div class="hint">
+      Automatically extracted from the FILENAME line. You can edit it
+      before downloading.
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-green" id="btnBuild" disabled>
+        Build translated .docx
+      </button>
+    </div>
+
+    <div class="validation-summary" id="validationSummary"></div>
+    <div class="status" id="s2"></div>
+
+    <!-- Missing translation warning -->
+    <div class="warning-panel" id="missingWarning" hidden>
+      <div class="warning-title">
+        <span>⚠</span>
+        <span>Translation incomplete</span>
       </div>
 
-      <textarea id="translatedInput" rows="8" placeholder="Paste the AI's response here…"></textarea>
+      <div class="warning-text" id="warningMessage"></div>
 
-      <label class="field-label" for="outputFilename">English download filename</label>
-      <input
-        class="text-input"
-        id="outputFilename"
-        type="text"
-        placeholder="The AI-translated filename will appear here"
-        autocomplete="off"
-      >
-      <div class="hint">
-        Automatically extracted from the FILENAME line. You can edit it before downloading.
-      </div>
+      <div class="warning-ids" id="warningIds"></div>
 
       <div class="btn-row">
-        <button class="btn btn-green" id="btnBuild" disabled>Build translated .docx</button>
+        <button class="btn btn-primary" id="btnCopyMissing">
+          Copy missing paragraphs
+        </button>
+
+        <button class="btn btn-secondary" id="btnBack">
+          Back and paste the rest
+        </button>
+
+        <button class="btn btn-danger" id="btnContinue">
+          Continue anyway
+        </button>
       </div>
 
-      <div class="status" id="s2"></div>
+      <div class="warning-note">
+        Continuing anyway leaves missing paragraphs unchanged in the
+        original DOCX. The page checks ID coverage, not the semantic
+        quality of the AI's translation.
+      </div>
+
+      <div class="status" id="warningStatus"></div>
     </div>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
-  <script>
-    // ── Constants ────────────────────────────────────────────────────────────────
-    const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-    const XML_NS = "http://www.w3.org/XML/1998/namespace";
-    const RE_ZH = /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/;
+</div>
 
-    const SCAN_PARTS = [
-      "word/document.xml",
-      "word/header1.xml", "word/header2.xml", "word/header3.xml",
-      "word/footer1.xml", "word/footer2.xml", "word/footer3.xml",
-      "word/footnotes.xml", "word/endnotes.xml"
-    ];
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
-    const PROMPT = `You are an expert English-language medical textbook editor and translator.
+<script>
+// ── Constants ────────────────────────────────────────────────────────────────
+
+const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+const XML_NS = "http://www.w3.org/XML/1998/namespace";
+
+const RE_ZH = /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/;
+
+const SCAN_PARTS = [
+  "word/document.xml",
+  "word/header1.xml", "word/header2.xml", "word/header3.xml",
+  "word/footer1.xml", "word/footer2.xml", "word/footer3.xml",
+  "word/footnotes.xml", "word/endnotes.xml"
+];
+
+const PROMPT = `You are an expert English-language medical textbook editor and translator.
 
 Your task is to transform the Chinese source text into polished, publication-quality English that reads as though it were originally written by a native English-speaking medical textbook author.
 
@@ -306,405 +459,718 @@ CAPITALIZATION:
 SOURCE TEXT:
 `;
 
-    // ── State ────────────────────────────────────────────────────────────────────
-    let docxBuffer = null;
-    let originalFilename = "";
-    let extractedIds = new Set();
-    let filenameWasEdited = false;
+// ── State ────────────────────────────────────────────────────────────────────
 
-    // ── Helpers ──────────────────────────────────────────────────────────────────
-    function parseXml(str) {
-      const doc = new DOMParser().parseFromString(str, "application/xml");
-      if (doc.getElementsByTagName("parsererror").length) {
-        throw new Error("The DOCX contains invalid XML.");
-      }
-      return doc;
+let docxBuffer = null;
+let originalFilename = "";
+let extractedIds = new Set();
+let extractedSource = new Map();
+let filenameWasEdited = false;
+
+// The incomplete-build decision is valid only for the exact text
+// that was reviewed in the warning.
+let approvedIncompleteText = null;
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function parseXml(str) {
+  const doc = new DOMParser().parseFromString(str, "application/xml");
+
+  if (doc.getElementsByTagName("parsererror").length) {
+    throw new Error("The DOCX contains invalid XML.");
+  }
+
+  return doc;
+}
+
+function serializeXml(doc) {
+  const raw = new XMLSerializer().serializeToString(doc);
+
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
+    + raw.replace(/^<\?xml[^?]*\?>\s*/i, "");
+}
+
+function stripDocxExtension(name) {
+  return name.replace(/\.docx$/i, "");
+}
+
+function sanitizeFilename(name) {
+  let clean = String(name || "")
+    .replace(/\.docx$/i, "")
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "")
+    .replace(/\s+/g, " ")
+    .replace(/[. ]+$/g, "")
+    .trim();
+
+  if (!clean || clean === "." || clean === "..") {
+    clean = "Translated Document";
+  }
+
+  // Avoid reserved Windows device names.
+  if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(clean)) {
+    clean = "_" + clean;
+  }
+
+  return clean + ".docx";
+}
+
+function setStatus(id, msg, type = "") {
+  const el = document.getElementById(id);
+  el.textContent = msg;
+  el.className = "status " + type;
+}
+
+function hideMissingWarning() {
+  document.getElementById("missingWarning").hidden = true;
+  setStatus("warningStatus", "");
+}
+
+function resetIncompleteApproval() {
+  approvedIncompleteText = null;
+}
+
+// Returns all nonempty text elements in a paragraph if it contains Chinese.
+// One group = one whole paragraph.
+function paraGroup(para) {
+  const ts = Array.from(para.getElementsByTagNameNS(W, "t"))
+    .filter(e => e.textContent !== "");
+
+  if (!ts.length) return [];
+  if (!RE_ZH.test(ts.map(e => e.textContent).join(""))) return [];
+
+  return ts;
+}
+
+function parseTranslationResponse(raw) {
+  const tmap = new Map();
+  let filename = "";
+
+  for (const line of raw.split(/\r?\n/)) {
+    const t = line.trim();
+    const pi = t.indexOf("|");
+
+    if (pi === -1) continue;
+
+    const key = t.slice(0, pi).trim();
+    const value = t.slice(pi + 1).trim();
+
+    if (key.toUpperCase() === "FILENAME") {
+      if (value) filename = value;
+      continue;
     }
 
-    function serializeXml(doc) {
-      const raw = new XMLSerializer().serializeToString(doc);
-      return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n'
-        + raw.replace(/^<\?xml[^?]*\?>\s*/i, "");
+    if (!/^\d+$/.test(key)) continue;
+
+    // A later nonempty translation overrides an earlier one.
+    // This allows interrupted AI responses to be appended safely.
+    if (value) tmap.set(Number(key), value);
+  }
+
+  return { filename, tmap };
+}
+
+// ── Validation ───────────────────────────────────────────────────────────────
+
+function validateTranslation(tmap) {
+  const missing = [...extractedIds].filter(id => !tmap.has(id));
+  const unknown = [...tmap.keys()].filter(id => !extractedIds.has(id));
+
+  return {
+    complete: missing.length === 0,
+    missing,
+    unknown,
+    translated: extractedIds.size - missing.length,
+    total: extractedIds.size
+  };
+}
+
+function formatIds(ids, limit = 40) {
+  if (!ids.length) return "None";
+
+  const shown = ids.slice(0, limit).join(", ");
+  const remaining = ids.length - limit;
+
+  return remaining > 0
+    ? shown + `, … (+${remaining} more)`
+    : shown;
+}
+
+function updateValidationSummary() {
+  const el = document.getElementById("validationSummary");
+
+  if (!docxBuffer || extractedIds.size === 0) {
+    el.textContent = "";
+    el.className = "validation-summary";
+    return;
+  }
+
+  const { tmap } = parseTranslationResponse(translatedInput.value);
+
+  if (tmap.size === 0) {
+    el.textContent = `${extractedIds.size} paragraphs expected.`;
+    el.className = "validation-summary";
+    return;
+  }
+
+  const result = validateTranslation(tmap);
+
+  if (result.complete) {
+    el.textContent =
+      `✓ All ${result.total} paragraphs have translations.`;
+
+    el.className = "validation-summary ok";
+  } else {
+    el.textContent =
+      `${result.translated} / ${result.total} translated · `
+      + `${result.missing.length} missing`;
+
+    el.className = "validation-summary err";
+  }
+}
+
+function showMissingWarning(result) {
+  const panel = document.getElementById("missingWarning");
+  const message = document.getElementById("warningMessage");
+  const ids = document.getElementById("warningIds");
+
+  message.textContent =
+    `Only ${result.translated} of ${result.total} paragraphs have `
+    + `translations. ${result.missing.length} paragraphs are missing.`;
+
+  ids.textContent =
+    "Missing IDs: " + formatIds(result.missing);
+
+  // Unknown IDs are reported separately because they do not correspond
+  // to any source paragraph and will not be used during the build.
+  if (result.unknown.length) {
+    ids.textContent +=
+      "\n\nUnknown IDs (ignored): " + formatIds(result.unknown);
+  }
+
+  panel.hidden = false;
+  setStatus("s2", "Translation incomplete. Review the warning below.", "err");
+
+  panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+// Build a continuation prompt containing the actual missing source paragraphs.
+function buildMissingPrompt(missingIds) {
+  const sourceLines = missingIds
+    .filter(id => extractedSource.has(id))
+    .map(id => `${id}|${extractedSource.get(id)}`);
+
+  return `Continue translating the missing paragraphs below.
+
+Use the same medical textbook translation standard as before.
+
+IMPORTANT:
+- Translate every supplied paragraph.
+- Preserve every numeric ID exactly.
+- Return ONLY lines in the format id|English translation.
+- Do not include FILENAME.
+- Do not add explanations, headings, comments, or extra lines.
+- Do not merge or split paragraphs.
+- Do not insert line breaks within a translated paragraph.
+- Do not include the pipe character | inside the translated text.
+- If a previous response stopped halfway through a paragraph, regenerate that entire paragraph rather than continuing its sentence fragment.
+- Return the complete translation for each ID.
+
+MISSING SOURCE TEXT:
+${sourceLines.join("\n")}`;
+}
+
+async function copyText(text) {
+  // Preferred modern clipboard API.
+  if (navigator.clipboard && window.isSecureContext) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  // Fallback for browsers or local-file contexts without clipboard access.
+  const temp = document.createElement("textarea");
+  temp.value = text;
+  temp.style.position = "fixed";
+  temp.style.opacity = "0";
+  document.body.appendChild(temp);
+  temp.select();
+
+  const successful = document.execCommand("copy");
+  temp.remove();
+
+  if (!successful) {
+    throw new Error("Clipboard access was denied.");
+  }
+}
+
+// ── Core: extract ────────────────────────────────────────────────────────────
+
+async function extractRuns(buffer) {
+  const zip = await JSZip.loadAsync(buffer);
+  const lines = [];
+  const ids = new Set();
+  const sourceMap = new Map();
+
+  let globalIdx = 0;
+
+  for (const part of SCAN_PARTS) {
+    if (!zip.files[part]) continue;
+
+    const doc = parseXml(await zip.files[part].async("string"));
+    const allT = Array.from(doc.getElementsByTagNameNS(W, "t"));
+    const posOf = new Map(allT.map((e, i) => [e, i]));
+
+    for (const para of doc.getElementsByTagNameNS(W, "p")) {
+      const group = paraGroup(para);
+      if (!group.length) continue;
+
+      const firstPos = posOf.get(group[0]);
+      if (firstPos === undefined) continue;
+
+      const id = globalIdx + firstPos;
+      const sourceText = group.map(e => e.textContent).join("");
+
+      ids.add(id);
+      sourceMap.set(id, sourceText);
+      lines.push(`${id}|${sourceText}`);
     }
 
-    function stripDocxExtension(name) {
-      return name.replace(/\.docx$/i, "");
-    }
+    globalIdx += allT.length;
+  }
 
-    function sanitizeFilename(name) {
-      let clean = String(name || "")
-        .replace(/\.docx$/i, "")
-        .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "")
-        .replace(/\s+/g, " ")
-        .replace(/[. ]+$/g, "")
-        .trim();
+  return {
+    text: lines.join("\n"),
+    nGroups: lines.length,
+    ids,
+    sourceMap
+  };
+}
 
-      if (!clean || clean === "." || clean === "..") {
-        clean = "Translated Document";
-      }
+// ── Core: build ──────────────────────────────────────────────────────────────
 
-      // Avoid reserved Windows device names.
-      if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/i.test(clean)) {
-        clean = "_" + clean;
-      }
+async function buildTranslated(buffer, tmap) {
+  const zip = await JSZip.loadAsync(buffer);
 
-      return clean + ".docx";
-    }
+  let globalIdx = 0;
+  let replacedTotal = 0;
 
-    function setStatus(id, msg, type = "") {
-      const el = document.getElementById(id);
-      el.textContent = msg;
-      el.className = "status " + type;
-    }
+  for (const part of SCAN_PARTS) {
+    if (!zip.files[part]) continue;
 
-    // Returns all nonempty text elements in a paragraph if it contains Chinese.
-    // One group = one whole paragraph.
-    function paraGroup(para) {
-      const ts = Array.from(para.getElementsByTagNameNS(W, "t"))
-        .filter(e => e.textContent !== "");
-      if (!ts.length) return [];
-      if (!RE_ZH.test(ts.map(e => e.textContent).join(""))) return [];
-      return ts;
-    }
+    const doc = parseXml(await zip.files[part].async("string"));
+    const allT = Array.from(doc.getElementsByTagNameNS(W, "t"));
+    const posOf = new Map(allT.map((e, i) => [e, i]));
 
-    function parseTranslationResponse(raw) {
-      const tmap = new Map();
-      let filename = "";
+    let replaced = 0;
 
-      for (const line of raw.split(/\r?\n/)) {
-        const t = line.trim();
-        const pi = t.indexOf("|");
-        if (pi === -1) continue;
+    for (const para of doc.getElementsByTagNameNS(W, "p")) {
+      const group = paraGroup(para);
+      if (!group.length) continue;
 
-        const key = t.slice(0, pi).trim();
-        const value = t.slice(pi + 1).trim();
+      const gi = globalIdx + posOf.get(group[0]);
 
-        if (key.toUpperCase() === "FILENAME") {
-          if (value) filename = value;
-          continue;
-        }
+      if (!tmap.has(gi)) continue;
 
-        if (!/^\d+$/.test(key)) continue;
-        if (value) tmap.set(Number(key), value);
-      }
+      // 1. Replace the paragraph text.
+      group[0].textContent = tmap.get(gi);
+      group[0].setAttributeNS(XML_NS, "xml:space", "preserve");
 
-      return { filename, tmap };
-    }
-
-    // ── Core: extract ────────────────────────────────────────────────────────────
-    async function extractRuns(buffer) {
-      const zip = await JSZip.loadAsync(buffer);
-      const lines = [];
-      const ids = new Set();
-      let globalIdx = 0;
-
-      for (const part of SCAN_PARTS) {
-        if (!zip.files[part]) continue;
-
-        const doc = parseXml(await zip.files[part].async("string"));
-        const allT = Array.from(doc.getElementsByTagNameNS(W, "t"));
-        const posOf = new Map(allT.map((e, i) => [e, i]));
-
-        for (const para of doc.getElementsByTagNameNS(W, "p")) {
-          const group = paraGroup(para);
-          if (!group.length) continue;
-
-          const firstPos = posOf.get(group[0]);
-          if (firstPos === undefined) continue;
-
-          const id = globalIdx + firstPos;
-          ids.add(id);
-          lines.push(`${id}|${group.map(e => e.textContent).join("")}`);
-        }
-
-        globalIdx += allT.length;
-      }
-
-      return { text: lines.join("\n"), nGroups: lines.length, ids };
-    }
-
-    // ── Core: build ──────────────────────────────────────────────────────────────
-    async function buildTranslated(buffer, tmap) {
-      const zip = await JSZip.loadAsync(buffer);
-      let globalIdx = 0;
-      let replacedTotal = 0;
-
-      for (const part of SCAN_PARTS) {
-        if (!zip.files[part]) continue;
-
-        const doc = parseXml(await zip.files[part].async("string"));
-        const allT = Array.from(doc.getElementsByTagNameNS(W, "t"));
-        const posOf = new Map(allT.map((e, i) => [e, i]));
-        let replaced = 0;
-
-        for (const para of doc.getElementsByTagNameNS(W, "p")) {
-          const group = paraGroup(para);
-          if (!group.length) continue;
-
-          const gi = globalIdx + posOf.get(group[0]);
-          if (!tmap.has(gi)) continue;
-
-          // 1. Replace the paragraph text.
-          group[0].textContent = tmap.get(gi);
-          group[0].setAttributeNS(XML_NS, "xml:space", "preserve");
-          group.slice(1).forEach(e => { e.textContent = ""; });
-
-          // 2. Set the first text run's font to Times New Roman.
-          const run = group[0].parentElement;
-          if (run && run.localName === "r") {
-            let rPr = Array.from(run.children)
-              .find(e => e.namespaceURI === W && e.localName === "rPr");
-
-            if (!rPr) {
-              rPr = doc.createElementNS(W, "w:rPr");
-              run.insertBefore(rPr, run.firstChild);
-            }
-
-            let rFonts = Array.from(rPr.children)
-              .find(e => e.namespaceURI === W && e.localName === "rFonts");
-
-            if (!rFonts) {
-              rFonts = doc.createElementNS(W, "w:rFonts");
-              rPr.appendChild(rFonts);
-            }
-
-            rFonts.setAttributeNS(W, "w:ascii", "Times New Roman");
-            rFonts.setAttributeNS(W, "w:hAnsi", "Times New Roman");
-            rFonts.setAttributeNS(W, "w:eastAsia", "Times New Roman");
-            rFonts.setAttributeNS(W, "w:cs", "Times New Roman");
-          }
-
-          replaced++;
-        }
-
-        globalIdx += allT.length;
-
-        if (replaced > 0) {
-          zip.file(part, serializeXml(doc));
-          replacedTotal += replaced;
-        }
-      }
-
-      await convertNumbering(zip);
-
-      const blob = await zip.generateAsync({
-        type: "blob",
-        mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        compression: "DEFLATE"
+      group.slice(1).forEach(e => {
+        e.textContent = "";
       });
 
-      return { blob, replacedTotal };
-    }
+      // 2. Set the first text run's font to Times New Roman.
+      const run = group[0].parentElement;
 
-    // ── Core: numbering ──────────────────────────────────────────────────────────
-    async function convertNumbering(zip) {
-      if (!zip.files["word/numbering.xml"]) return;
+      if (run && run.localName === "r") {
+        let rPr = Array.from(run.children)
+          .find(e => e.namespaceURI === W && e.localName === "rPr");
 
-      const doc = parseXml(await zip.files["word/numbering.xml"].async("string"));
-      let modified = false;
-
-      for (const lvl of doc.getElementsByTagNameNS(W, "lvl")) {
-        const ilvl = lvl.getAttributeNS(W, "ilvl") ?? lvl.getAttribute("ilvl") ?? "0";
-        const ltEl = lvl.getElementsByTagNameNS(W, "lvlText")[0];
-        const nfEl = lvl.getElementsByTagNameNS(W, "numFmt")[0];
-        const stEl = lvl.getElementsByTagNameNS(W, "start")[0];
-        const sfEl = lvl.getElementsByTagNameNS(W, "suff")[0];
-        if (!ltEl) continue;
-
-        const val = ltEl.getAttributeNS(W, "val") ?? ltEl.getAttribute("val") ?? "";
-        const n = (parseInt(ilvl, 10) + 1).toString();
-
-        if (val.includes("\u3001")) {
-          ltEl.setAttributeNS(W, "w:val", `%${n}.`);
-          nfEl?.setAttributeNS(W, "w:val", "upperRoman");
-          if (stEl) stEl.setAttributeNS(W, "w:val", "1");
-          if (sfEl) sfEl.setAttributeNS(W, "w:val", "space");
-          modified = true;
-        } else if (
-          val.includes("\uff08") ||
-          (val.includes("(") && val.includes(")") && val.includes("%"))
-        ) {
-          ltEl.setAttributeNS(W, "w:val", `%${n}.`);
-          nfEl?.setAttributeNS(W, "w:val", "lowerLetter");
-          if (stEl) stEl.setAttributeNS(W, "w:val", "1");
-          if (sfEl) sfEl.setAttributeNS(W, "w:val", "space");
-          modified = true;
-        }
-      }
-
-      if (modified) zip.file("word/numbering.xml", serializeXml(doc));
-    }
-
-    // ── Drop zone ────────────────────────────────────────────────────────────────
-    const dz = document.getElementById("dropzone");
-    const fi = document.getElementById("fileInput");
-    const translatedInput = document.getElementById("translatedInput");
-    const outputFilename = document.getElementById("outputFilename");
-
-    dz.addEventListener("click", () => fi.click());
-
-    fi.addEventListener("change", () => {
-      if (fi.files[0]) setFile(fi.files[0]);
-    });
-
-    dz.addEventListener("dragover", e => {
-      e.preventDefault();
-      dz.classList.add("over");
-    });
-
-    dz.addEventListener("dragleave", () => {
-      dz.classList.remove("over");
-    });
-
-    dz.addEventListener("drop", e => {
-      e.preventDefault();
-      dz.classList.remove("over");
-      if (e.dataTransfer.files[0]) setFile(e.dataTransfer.files[0]);
-    });
-
-    function setFile(f) {
-      if (!/\.docx$/i.test(f.name)) {
-        setStatus("s1", "Not a .docx file", "err");
-        return;
-      }
-
-      const reader = new FileReader();
-
-      reader.onload = e => {
-        docxBuffer = e.target.result;
-        originalFilename = f.name;
-        extractedIds = new Set();
-        filenameWasEdited = false;
-
-        document.getElementById("dropzoneText").textContent = "📄 " + f.name;
-        dz.classList.add("filled");
-
-        translatedInput.value = "";
-        outputFilename.value = "";
-        document.getElementById("btnExtract").disabled = false;
-        document.getElementById("btnBuild").disabled = true;
-        document.getElementById("b1").className = "badge active";
-        document.getElementById("b2").className = "badge";
-
-        setStatus("s1", "");
-        setStatus("s2", "");
-      };
-
-      reader.readAsArrayBuffer(f);
-    }
-
-    // ── Filename auto-detection ──────────────────────────────────────────────────
-    translatedInput.addEventListener("input", () => {
-      const { filename } = parseTranslationResponse(translatedInput.value);
-
-      if (filename && !filenameWasEdited) {
-        outputFilename.value = stripDocxExtension(filename);
-      }
-    });
-
-    outputFilename.addEventListener("input", () => {
-      filenameWasEdited = true;
-    });
-
-    // ── Actions ──────────────────────────────────────────────────────────────────
-    document.getElementById("btnExtract").addEventListener("click", doExtract);
-    document.getElementById("btnBuild").addEventListener("click", doBuild);
-
-    async function doExtract() {
-      if (!docxBuffer) return;
-
-      const btn = document.getElementById("btnExtract");
-      btn.disabled = true;
-      setStatus("s1", "Extracting…");
-
-      try {
-        const { text, nGroups, ids } = await extractRuns(docxBuffer);
-        extractedIds = ids;
-
-        const promptText = PROMPT
-          + "FILENAME|" + stripDocxExtension(originalFilename) + "\n"
-          + text;
-
-        let copied = false;
-        try {
-          await navigator.clipboard.writeText(promptText);
-          copied = true;
-        } catch (_) {
-          // Clipboard may be unavailable outside a secure context.
+        if (!rPr) {
+          rPr = doc.createElementNS(W, "w:rPr");
+          run.insertBefore(rPr, run.firstChild);
         }
 
-        document.getElementById("b1").className = "badge done";
-        document.getElementById("b2").className = "badge active";
-        document.getElementById("btnBuild").disabled = false;
+        let rFonts = Array.from(rPr.children)
+          .find(e => e.namespaceURI === W && e.localName === "rFonts");
 
-        if (copied) {
-          setStatus("s1", `✓ ${nGroups} paragraphs extracted — prompt, filename, and text copied to clipboard!`, "ok");
-        } else {
-          setStatus("s1", `✓ ${nGroups} paragraphs extracted, but clipboard access was denied. Please allow clipboard access and try again.`, "err");
+        if (!rFonts) {
+          rFonts = doc.createElementNS(W, "w:rFonts");
+          rPr.appendChild(rFonts);
         }
-      } catch (e) {
-        setStatus("s1", "Error: " + e.message, "err");
-      } finally {
-        btn.disabled = false;
+
+        rFonts.setAttributeNS(W, "w:ascii", "Times New Roman");
+        rFonts.setAttributeNS(W, "w:hAnsi", "Times New Roman");
+        rFonts.setAttributeNS(W, "w:eastAsia", "Times New Roman");
+        rFonts.setAttributeNS(W, "w:cs", "Times New Roman");
       }
+
+      replaced++;
     }
 
-    async function doBuild() {
-      const translated = translatedInput.value.trim();
+    globalIdx += allT.length;
 
-      if (!translated) {
-        setStatus("s2", "Paste the translated text first.", "err");
-        return;
-      }
-
-      if (!docxBuffer) {
-        setStatus("s2", "Upload a file first (Step 1).", "err");
-        return;
-      }
-
-      const { filename, tmap } = parseTranslationResponse(translated);
-
-      if (tmap.size === 0 && extractedIds.size > 0) {
-        setStatus("s2", "No valid translated paragraph lines were found. Expected id|text.", "err");
-        return;
-      }
-
-      // Use the editable field first, then the AI filename, then the original.
-      const chosenName = outputFilename.value.trim()
-        || filename
-        || stripDocxExtension(originalFilename);
-
-      const downloadName = sanitizeFilename(chosenName);
-
-      const btn = document.getElementById("btnBuild");
-      btn.disabled = true;
-      setStatus("s2", "Building…");
-
-      try {
-        const { blob, replacedTotal } = await buildTranslated(docxBuffer, tmap);
-
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = downloadName;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-
-        document.getElementById("b2").className = "badge done";
-        setStatus(
-          "s2",
-          `✓ ${replacedTotal} paragraphs replaced. Download started: ${downloadName}`,
-          "ok"
-        );
-      } catch (e) {
-        setStatus("s2", "Error: " + e.message, "err");
-      } finally {
-        btn.disabled = false;
-      }
+    if (replaced > 0) {
+      zip.file(part, serializeXml(doc));
+      replacedTotal += replaced;
     }
-  </script>
+  }
+
+  await convertNumbering(zip);
+
+  const blob = await zip.generateAsync({
+    type: "blob",
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    compression: "DEFLATE"
+  });
+
+  return { blob, replacedTotal };
+}
+
+// ── Core: numbering ──────────────────────────────────────────────────────────
+
+async function convertNumbering(zip) {
+  if (!zip.files["word/numbering.xml"]) return;
+
+  const doc = parseXml(await zip.files["word/numbering.xml"].async("string"));
+  let modified = false;
+
+  for (const lvl of doc.getElementsByTagNameNS(W, "lvl")) {
+    const ilvl =
+      lvl.getAttributeNS(W, "ilvl") ??
+      lvl.getAttribute("ilvl") ??
+      "0";
+
+    const ltEl = lvl.getElementsByTagNameNS(W, "lvlText")[0];
+    const nfEl = lvl.getElementsByTagNameNS(W, "numFmt")[0];
+    const stEl = lvl.getElementsByTagNameNS(W, "start")[0];
+    const sfEl = lvl.getElementsByTagNameNS(W, "suff")[0];
+
+    if (!ltEl) continue;
+
+    const val =
+      ltEl.getAttributeNS(W, "val") ??
+      ltEl.getAttribute("val") ??
+      "";
+
+    const n = (parseInt(ilvl, 10) + 1).toString();
+
+    if (val.includes("\u3001")) {
+      ltEl.setAttributeNS(W, "w:val", `%${n}.`);
+      nfEl?.setAttributeNS(W, "w:val", "upperRoman");
+
+      if (stEl) stEl.setAttributeNS(W, "w:val", "1");
+      if (sfEl) sfEl.setAttributeNS(W, "w:val", "space");
+
+      modified = true;
+    } else if (
+      val.includes("\uff08") ||
+      (val.includes("(") && val.includes(")") && val.includes("%"))
+    ) {
+      ltEl.setAttributeNS(W, "w:val", `%${n}.`);
+      nfEl?.setAttributeNS(W, "w:val", "lowerLetter");
+
+      if (stEl) stEl.setAttributeNS(W, "w:val", "1");
+      if (sfEl) sfEl.setAttributeNS(W, "w:val", "space");
+
+      modified = true;
+    }
+  }
+
+  if (modified) {
+    zip.file("word/numbering.xml", serializeXml(doc));
+  }
+}
+
+// ── Drop zone ────────────────────────────────────────────────────────────────
+
+const dz = document.getElementById("dropzone");
+const fi = document.getElementById("fileInput");
+const translatedInput = document.getElementById("translatedInput");
+const outputFilename = document.getElementById("outputFilename");
+
+dz.addEventListener("click", () => fi.click());
+
+fi.addEventListener("change", () => {
+  if (fi.files[0]) setFile(fi.files[0]);
+});
+
+dz.addEventListener("dragover", e => {
+  e.preventDefault();
+  dz.classList.add("over");
+});
+
+dz.addEventListener("dragleave", () => {
+  dz.classList.remove("over");
+});
+
+dz.addEventListener("drop", e => {
+  e.preventDefault();
+  dz.classList.remove("over");
+
+  if (e.dataTransfer.files[0]) {
+    setFile(e.dataTransfer.files[0]);
+  }
+});
+
+function setFile(f) {
+  if (!/\.docx$/i.test(f.name)) {
+    setStatus("s1", "Not a .docx file", "err");
+    return;
+  }
+
+  const reader = new FileReader();
+
+  reader.onload = e => {
+    docxBuffer = e.target.result;
+    originalFilename = f.name;
+
+    extractedIds = new Set();
+    extractedSource = new Map();
+    filenameWasEdited = false;
+    resetIncompleteApproval();
+
+    document.getElementById("dropzoneText").textContent = "📄 " + f.name;
+    dz.classList.add("filled");
+
+    translatedInput.value = "";
+    outputFilename.value = "";
+
+    document.getElementById("btnExtract").disabled = false;
+    document.getElementById("btnBuild").disabled = true;
+
+    document.getElementById("b1").className = "badge active";
+    document.getElementById("b2").className = "badge";
+
+    hideMissingWarning();
+    updateValidationSummary();
+
+    setStatus("s1", "");
+    setStatus("s2", "");
+  };
+
+  reader.readAsArrayBuffer(f);
+}
+
+// ── Filename auto-detection ──────────────────────────────────────────────────
+
+translatedInput.addEventListener("input", () => {
+  const { filename } = parseTranslationResponse(translatedInput.value);
+
+  if (filename && !filenameWasEdited) {
+    outputFilename.value = stripDocxExtension(filename);
+  }
+
+  // Any edit invalidates the previous incomplete-build approval.
+  resetIncompleteApproval();
+  hideMissingWarning();
+  updateValidationSummary();
+});
+
+outputFilename.addEventListener("input", () => {
+  filenameWasEdited = true;
+});
+
+// ── Actions ──────────────────────────────────────────────────────────────────
+
+document.getElementById("btnExtract").addEventListener("click", doExtract);
+document.getElementById("btnBuild").addEventListener("click", doBuild);
+
+document.getElementById("btnCopyMissing").addEventListener("click", async () => {
+  const { tmap } = parseTranslationResponse(translatedInput.value);
+  const result = validateTranslation(tmap);
+
+  if (result.missing.length === 0) {
+    hideMissingWarning();
+    updateValidationSummary();
+    return;
+  }
+
+  const prompt = buildMissingPrompt(result.missing);
+
+  try {
+    await copyText(prompt);
+
+    setStatus(
+      "warningStatus",
+      `✓ Continuation prompt copied with ${result.missing.length} missing paragraphs. Paste it into the AI, then append the response here.`,
+      "ok"
+    );
+  } catch (e) {
+    setStatus(
+      "warningStatus",
+      "Could not copy automatically: " + e.message,
+      "err"
+    );
+  }
+});
+
+document.getElementById("btnBack").addEventListener("click", () => {
+  hideMissingWarning();
+  resetIncompleteApproval();
+
+  translatedInput.focus();
+  translatedInput.setSelectionRange(
+    translatedInput.value.length,
+    translatedInput.value.length
+  );
+});
+
+document.getElementById("btnContinue").addEventListener("click", () => {
+  // Approve only the exact current textarea contents.
+  approvedIncompleteText = translatedInput.value.trim();
+  hideMissingWarning();
+  doBuild();
+});
+
+async function doExtract() {
+  if (!docxBuffer) return;
+
+  const btn = document.getElementById("btnExtract");
+  btn.disabled = true;
+
+  setStatus("s1", "Extracting…");
+
+  try {
+    const { text, nGroups, ids, sourceMap } =
+      await extractRuns(docxBuffer);
+
+    extractedIds = ids;
+    extractedSource = sourceMap;
+    resetIncompleteApproval();
+    hideMissingWarning();
+
+    const promptText = PROMPT
+      + "FILENAME|" + stripDocxExtension(originalFilename) + "\n"
+      + text;
+
+    let copied = false;
+
+    try {
+      await copyText(promptText);
+      copied = true;
+    } catch (_) {
+      // Clipboard may be unavailable.
+    }
+
+    document.getElementById("b1").className = "badge done";
+    document.getElementById("b2").className = "badge active";
+    document.getElementById("btnBuild").disabled = false;
+
+    updateValidationSummary();
+
+    if (copied) {
+      setStatus(
+        "s1",
+        `✓ ${nGroups} paragraphs extracted — prompt, filename, and text copied to clipboard!`,
+        "ok"
+      );
+    } else {
+      setStatus(
+        "s1",
+        `✓ ${nGroups} paragraphs extracted, but clipboard access was denied. Please allow clipboard access and try again.`,
+        "err"
+      );
+    }
+  } catch (e) {
+    setStatus("s1", "Error: " + e.message, "err");
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function doBuild() {
+  const translated = translatedInput.value.trim();
+
+  if (!translated) {
+    setStatus("s2", "Paste the translated text first.", "err");
+    return;
+  }
+
+  if (!docxBuffer) {
+    setStatus("s2", "Upload a file first (Step 1).", "err");
+    return;
+  }
+
+  const { filename, tmap } = parseTranslationResponse(translated);
+
+  if (tmap.size === 0 && extractedIds.size > 0) {
+    setStatus(
+      "s2",
+      "No valid translated paragraph lines were found. Expected id|text.",
+      "err"
+    );
+    return;
+  }
+
+  // ── NEW: Validate every expected paragraph ID ────────────────────────────
+
+  const result = validateTranslation(tmap);
+
+  if (
+    !result.complete &&
+    approvedIncompleteText !== translated
+  ) {
+    showMissingWarning(result);
+    return;
+  }
+
+  // Approval is consumed by this build attempt.
+  const buildingIncomplete = !result.complete;
+  resetIncompleteApproval();
+
+  // ── Existing build logic ──────────────────────────────────────────────────
+
+  const chosenName = outputFilename.value.trim()
+    || filename
+    || stripDocxExtension(originalFilename);
+
+  const downloadName = sanitizeFilename(chosenName);
+
+  const btn = document.getElementById("btnBuild");
+  btn.disabled = true;
+
+  setStatus("s2", "Building…");
+
+  try {
+    const { blob, replacedTotal } =
+      await buildTranslated(docxBuffer, tmap);
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+
+    a.href = url;
+    a.download = downloadName;
+
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    document.getElementById("b2").className = "badge done";
+
+    if (buildingIncomplete) {
+      setStatus(
+        "s2",
+        `⚠ ${replacedTotal} paragraphs replaced. `
+        + `${result.missing.length} missing paragraphs remain unchanged. `
+        + `Download started: ${downloadName}`,
+        "err"
+      );
+    } else {
+      setStatus(
+        "s2",
+        `✓ ${replacedTotal} paragraphs replaced. Download started: ${downloadName}`,
+        "ok"
+      );
+    }
+  } catch (e) {
+    setStatus("s2", "Error: " + e.message, "err");
+  } finally {
+    btn.disabled = false;
+  }
+}
+</script>
+
 </body>
 </html>
