@@ -297,8 +297,28 @@ textarea:focus, .text-input:focus {
     </div>
 
     <div class="dropzone" id="dropzone">
-      <input type="file" id="fileInput" accept=".docx">
-      <span id="dropzoneText">Drop your .docx here or click to browse</span>
+      <input type="file" id="fileInput" accept=".docx,.pptx">
+      <span id="dropzoneText">Drop your .docx or .pptx here or click to browse</span>
+    </div>
+
+    <div class="file-meta" id="fileMeta"></div>
+
+    <div class="pptx-options" id="pptxOptions" hidden>
+      <label class="option-row">
+        <input type="checkbox" id="translateNotes" checked>
+        <span>Include speaker notes</span>
+      </label>
+      <label class="option-row">
+        <input type="checkbox" id="translateCharts" checked>
+        <span>Include chart titles, rich text, and cached Chinese category labels</span>
+      </label>
+      <label class="option-row">
+        <input type="checkbox" id="enableAutofit">
+        <span>Enable PowerPoint text AutoFit for translated text boxes (may slightly change text sizing)</span>
+      </label>
+      <div class="hint">
+        SmartArt text is included automatically. These options lock after extraction so the paragraph IDs stay stable.
+      </div>
     </div>
 
     <div class="btn-row">
@@ -347,7 +367,7 @@ textarea:focus, .text-input:focus {
 
     <div class="btn-row">
       <button class="btn btn-green" id="btnBuild" disabled>
-        Build translated .docx
+        Build translated file
       </button>
     </div>
 
@@ -380,9 +400,9 @@ textarea:focus, .text-input:focus {
       </div>
 
       <div class="warning-note">
-        Continuing anyway leaves missing paragraphs unchanged in the
-        original DOCX. The page checks ID coverage, not the semantic
-        quality of the AI's translation.
+        Continuing anyway leaves missing text unchanged in the original
+        Office file. The page checks ID coverage, not the semantic quality
+        of the AI's translation.
       </div>
 
       <div class="status" id="warningStatus"></div>
@@ -397,11 +417,13 @@ textarea:focus, .text-input:focus {
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+const A = "http://schemas.openxmlformats.org/drawingml/2006/main";
+const C = "http://schemas.openxmlformats.org/drawingml/2006/chart";
 const XML_NS = "http://www.w3.org/XML/1998/namespace";
 
 const RE_ZH = /[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/;
 
-const SCAN_PARTS = [
+const DOCX_SCAN_PARTS = [
   "word/document.xml",
   "word/header1.xml", "word/header2.xml", "word/header3.xml",
   "word/footer1.xml", "word/footer2.xml", "word/footer3.xml",
@@ -417,7 +439,7 @@ Prioritize natural English expression, idiomatic academic wording, and clear sen
 
 WRITING STANDARD:
 - Write in fluent, precise, professional textbook English.
-- Freely restructure sentences, change clause order, combine or split sentences, and replace Chinese-style expressions with natural English equivalents.
+- Freely restructure sentences, change clause order, combine or split sentences within a translation unit, and replace Chinese-style expressions with natural English equivalents.
 - Prefer established medical and scientific terminology and conventional textbook phrasing.
 - Use clear, direct prose rather than awkwardly formal, verbose, or mechanically literal language.
 - Preserve the original meaning, level of detail, and degree of certainty. Do not add unsupported facts, explanations, or interpretations.
@@ -425,6 +447,7 @@ WRITING STANDARD:
 - Maintain logical relationships, including cause and effect, contrast, conditions, and qualifications.
 - Where the Chinese is repetitive or unnatural, improve the expression without losing substantive content.
 - Preserve the intended function of the text: headings should read like textbook headings, definitions like definitions, and explanatory paragraphs like coherent textbook prose.
+- For slide titles, bullets, labels, and other fragments, preserve their concise fragment-like function; do not turn them into longer explanatory sentences unless the source itself is a sentence.
 
 EDITORIAL APPROACH:
 First understand what the source is communicating. Then express that meaning in the way a native English-speaking textbook author would naturally write it. Do not translate word by word or imitate Chinese grammar. Before finalizing, silently review the English for fluency, clarity, terminology, and fidelity.
@@ -435,22 +458,23 @@ Translate the original filename into natural, professional English suitable for 
 Preserve meaningful identifiers such as course codes, lecture numbers, dates, edition numbers, and acronyms.
 Do not invent information or add unnecessary words.
 Use a concise, descriptive filename with natural English capitalization.
-Do not include the .docx extension in the translated filename.
+Do not include the .docx or .pptx extension in the translated filename.
 Do not include path separators or characters that are invalid in common operating-system filenames.
 Return the translated filename as the FIRST output line in the format FILENAME|English filename.
 
 FORMAT:
 Each remaining input line is in the format id|text.
-Return ONLY the translated filename and rewritten English paragraphs.
+Return ONLY the translated filename and rewritten English text units.
 Preserve every numeric ID exactly and in the original order.
-Each input line represents a full paragraph. You may restructure the sentences within that paragraph, but do not merge or split lines.
+Each input line is one independent translation unit. It is normally a full paragraph, slide title, bullet, label, or table-cell paragraph. In PowerPoint, a richly formatted paragraph may be split into smaller units so formatting can be preserved.
+You may restructure sentences inside one unit, but do not merge separate IDs or split one ID across multiple output lines.
 Do not add explanations, comments, headings, or extra lines.
-Do not insert line breaks within a translated paragraph.
+Do not insert line breaks within a translated unit.
 Do not include the pipe character | inside the translated text.
-The first output line MUST be FILENAME|English filename, followed by the numbered paragraph lines.
+The first output line MUST be FILENAME|English filename, followed by the numbered translation lines.
 
 CAPITALIZATION:
-1. Capitalize the first word of each line.
+1. Capitalize the first word of each line when normal English usage calls for it.
 2. Use standard English sentence capitalization.
 3. Use lowercase for technical, medical, and anatomical terms unless they begin a sentence or are genuine proper nouns.
 4. Do not capitalize terms for emphasis.
@@ -461,11 +485,13 @@ SOURCE TEXT:
 
 // ── State ────────────────────────────────────────────────────────────────────
 
-let docxBuffer = null;
+let officeBuffer = null;
 let originalFilename = "";
+let fileKind = ""; // "docx" or "pptx"
 let extractedIds = new Set();
 let extractedSource = new Map();
 let filenameWasEdited = false;
+let extractedPptxOptions = null;
 
 // The incomplete-build decision is valid only for the exact text
 // that was reviewed in the warning.
@@ -477,7 +503,7 @@ function parseXml(str) {
   const doc = new DOMParser().parseFromString(str, "application/xml");
 
   if (doc.getElementsByTagName("parsererror").length) {
-    throw new Error("The DOCX contains invalid XML.");
+    throw new Error("The Office file contains invalid XML.");
   }
 
   return doc;
@@ -490,13 +516,19 @@ function serializeXml(doc) {
     + raw.replace(/^<\?xml[^?]*\?>\s*/i, "");
 }
 
-function stripDocxExtension(name) {
-  return name.replace(/\.docx$/i, "");
+function getFileKind(name) {
+  if (/\.docx$/i.test(name)) return "docx";
+  if (/\.pptx$/i.test(name)) return "pptx";
+  return "";
 }
 
-function sanitizeFilename(name) {
+function stripOfficeExtension(name) {
+  return String(name || "").replace(/\.(docx|pptx)$/i, "");
+}
+
+function sanitizeFilename(name, extension) {
   let clean = String(name || "")
-    .replace(/\.docx$/i, "")
+    .replace(/\.(docx|pptx)$/i, "")
     .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "")
     .replace(/\s+/g, " ")
     .replace(/[. ]+$/g, "")
@@ -511,7 +543,7 @@ function sanitizeFilename(name) {
     clean = "_" + clean;
   }
 
-  return clean + ".docx";
+  return clean + "." + extension;
 }
 
 function setStatus(id, msg, type = "") {
@@ -529,16 +561,26 @@ function resetIncompleteApproval() {
   approvedIncompleteText = null;
 }
 
-// Returns all nonempty text elements in a paragraph if it contains Chinese.
-// One group = one whole paragraph.
-function paraGroup(para) {
-  const ts = Array.from(para.getElementsByTagNameNS(W, "t"))
-    .filter(e => e.textContent !== "");
+function naturalPartSort(a, b) {
+  return a.localeCompare(b, undefined, { numeric: true, sensitivity: "base" });
+}
 
-  if (!ts.length) return [];
-  if (!RE_ZH.test(ts.map(e => e.textContent).join(""))) return [];
+function hasChinese(text) {
+  return RE_ZH.test(String(text || ""));
+}
 
-  return ts;
+function getPptxOptionsFromUi() {
+  return {
+    notes: document.getElementById("translateNotes").checked,
+    charts: document.getElementById("translateCharts").checked,
+    autofit: document.getElementById("enableAutofit").checked
+  };
+}
+
+function setPptxOptionsLocked(locked) {
+  document.getElementById("translateNotes").disabled = locked;
+  document.getElementById("translateCharts").disabled = locked;
+  document.getElementById("enableAutofit").disabled = locked;
 }
 
 function parseTranslationResponse(raw) {
@@ -598,7 +640,7 @@ function formatIds(ids, limit = 40) {
 function updateValidationSummary() {
   const el = document.getElementById("validationSummary");
 
-  if (!docxBuffer || extractedIds.size === 0) {
+  if (!officeBuffer || extractedIds.size === 0) {
     el.textContent = "";
     el.className = "validation-summary";
     return;
@@ -607,7 +649,7 @@ function updateValidationSummary() {
   const { tmap } = parseTranslationResponse(translatedInput.value);
 
   if (tmap.size === 0) {
-    el.textContent = `${extractedIds.size} paragraphs expected.`;
+    el.textContent = `${extractedIds.size} text units expected.`;
     el.className = "validation-summary";
     return;
   }
@@ -615,9 +657,7 @@ function updateValidationSummary() {
   const result = validateTranslation(tmap);
 
   if (result.complete) {
-    el.textContent =
-      `✓ All ${result.total} paragraphs have translations.`;
-
+    el.textContent = `✓ All ${result.total} text units have translations.`;
     el.className = "validation-summary ok";
   } else {
     el.textContent =
@@ -634,14 +674,13 @@ function showMissingWarning(result) {
   const ids = document.getElementById("warningIds");
 
   message.textContent =
-    `Only ${result.translated} of ${result.total} paragraphs have `
-    + `translations. ${result.missing.length} paragraphs are missing.`;
+    `Only ${result.translated} of ${result.total} text units have `
+    + `translations. ${result.missing.length} units are missing.`;
 
-  ids.textContent =
-    "Missing IDs: " + formatIds(result.missing);
+  ids.textContent = "Missing IDs: " + formatIds(result.missing);
 
   // Unknown IDs are reported separately because they do not correspond
-  // to any source paragraph and will not be used during the build.
+  // to any source unit and will not be used during the build.
   if (result.unknown.length) {
     ids.textContent +=
       "\n\nUnknown IDs (ignored): " + formatIds(result.unknown);
@@ -653,26 +692,26 @@ function showMissingWarning(result) {
   panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
-// Build a continuation prompt containing the actual missing source paragraphs.
+// Build a continuation prompt containing the actual missing source units.
 function buildMissingPrompt(missingIds) {
   const sourceLines = missingIds
     .filter(id => extractedSource.has(id))
     .map(id => `${id}|${extractedSource.get(id)}`);
 
-  return `Continue translating the missing paragraphs below.
+  return `Continue translating the missing text units below.
 
-Use the same medical textbook translation standard as before.
+Use the same medical textbook / lecture translation standard as before.
 
 IMPORTANT:
-- Translate every supplied paragraph.
+- Translate every supplied unit.
 - Preserve every numeric ID exactly.
 - Return ONLY lines in the format id|English translation.
 - Do not include FILENAME.
 - Do not add explanations, headings, comments, or extra lines.
-- Do not merge or split paragraphs.
-- Do not insert line breaks within a translated paragraph.
+- Do not merge or split IDs.
+- Do not insert line breaks within a translated unit.
 - Do not include the pipe character | inside the translated text.
-- If a previous response stopped halfway through a paragraph, regenerate that entire paragraph rather than continuing its sentence fragment.
+- If a previous response stopped halfway through a unit, regenerate that entire unit rather than continuing its sentence fragment.
 - Return the complete translation for each ID.
 
 MISSING SOURCE TEXT:
@@ -702,17 +741,34 @@ async function copyText(text) {
   }
 }
 
-// ── Core: extract ────────────────────────────────────────────────────────────
+// ── DOCX: extract/build ──────────────────────────────────────────────────────
 
-async function extractRuns(buffer) {
+// Returns all nonempty Word text elements in a paragraph if it contains Chinese.
+// One group = one whole paragraph.
+function docxParaGroup(para) {
+  const ts = Array.from(para.getElementsByTagNameNS(W, "t"))
+    .filter(e => e.textContent !== "");
+
+  if (!ts.length) return [];
+  if (!hasChinese(ts.map(e => e.textContent).join(""))) return [];
+
+  return ts;
+}
+
+async function extractDocx(buffer) {
   const zip = await JSZip.loadAsync(buffer);
+
+  if (!zip.files["word/document.xml"]) {
+    throw new Error("This does not appear to be a valid .docx file.");
+  }
+
   const lines = [];
   const ids = new Set();
   const sourceMap = new Map();
 
   let globalIdx = 0;
 
-  for (const part of SCAN_PARTS) {
+  for (const part of DOCX_SCAN_PARTS) {
     if (!zip.files[part]) continue;
 
     const doc = parseXml(await zip.files[part].async("string"));
@@ -720,7 +776,7 @@ async function extractRuns(buffer) {
     const posOf = new Map(allT.map((e, i) => [e, i]));
 
     for (const para of doc.getElementsByTagNameNS(W, "p")) {
-      const group = paraGroup(para);
+      const group = docxParaGroup(para);
       if (!group.length) continue;
 
       const firstPos = posOf.get(group[0]);
@@ -741,19 +797,18 @@ async function extractRuns(buffer) {
     text: lines.join("\n"),
     nGroups: lines.length,
     ids,
-    sourceMap
+    sourceMap,
+    detail: `${lines.length} Chinese paragraphs found`
   };
 }
 
-// ── Core: build ──────────────────────────────────────────────────────────────
-
-async function buildTranslated(buffer, tmap) {
+async function buildDocxTranslated(buffer, tmap) {
   const zip = await JSZip.loadAsync(buffer);
 
   let globalIdx = 0;
   let replacedTotal = 0;
 
-  for (const part of SCAN_PARTS) {
+  for (const part of DOCX_SCAN_PARTS) {
     if (!zip.files[part]) continue;
 
     const doc = parseXml(await zip.files[part].async("string"));
@@ -763,22 +818,21 @@ async function buildTranslated(buffer, tmap) {
     let replaced = 0;
 
     for (const para of doc.getElementsByTagNameNS(W, "p")) {
-      const group = paraGroup(para);
+      const group = docxParaGroup(para);
       if (!group.length) continue;
 
-      const gi = globalIdx + posOf.get(group[0]);
+      const firstPos = posOf.get(group[0]);
+      if (firstPos === undefined) continue;
 
+      const gi = globalIdx + firstPos;
       if (!tmap.has(gi)) continue;
 
-      // 1. Replace the paragraph text.
+      // Replace the whole paragraph while keeping the first run's formatting.
       group[0].textContent = tmap.get(gi);
       group[0].setAttributeNS(XML_NS, "xml:space", "preserve");
+      group.slice(1).forEach(e => { e.textContent = ""; });
 
-      group.slice(1).forEach(e => {
-        e.textContent = "";
-      });
-
-      // 2. Set the first text run's font to Times New Roman.
+      // Set the first text run's font to Times New Roman, preserving existing behavior.
       const run = group[0].parentElement;
 
       if (run && run.localName === "r") {
@@ -815,7 +869,7 @@ async function buildTranslated(buffer, tmap) {
     }
   }
 
-  await convertNumbering(zip);
+  await convertDocxNumbering(zip);
 
   const blob = await zip.generateAsync({
     type: "blob",
@@ -826,9 +880,7 @@ async function buildTranslated(buffer, tmap) {
   return { blob, replacedTotal };
 }
 
-// ── Core: numbering ──────────────────────────────────────────────────────────
-
-async function convertNumbering(zip) {
+async function convertDocxNumbering(zip) {
   if (!zip.files["word/numbering.xml"]) return;
 
   const doc = parseXml(await zip.files["word/numbering.xml"].async("string"));
@@ -881,12 +933,260 @@ async function convertNumbering(zip) {
   }
 }
 
+// ── PPTX: part discovery ─────────────────────────────────────────────────────
+
+function getPptxParts(zip, options) {
+  const names = Object.keys(zip.files).filter(name => !zip.files[name].dir);
+  const parts = [];
+
+  for (const name of names) {
+    if (/^ppt\/slides\/slide\d+\.xml$/i.test(name)) {
+      parts.push({ name, kind: "slide" });
+      continue;
+    }
+
+    if (/^ppt\/diagrams\/(data|drawing)\d+\.xml$/i.test(name)) {
+      parts.push({ name, kind: "diagram" });
+      continue;
+    }
+
+    if (options.notes && /^ppt\/notesSlides\/notesSlide\d+\.xml$/i.test(name)) {
+      parts.push({ name, kind: "notes" });
+      continue;
+    }
+
+    if (options.charts && /^ppt\/charts\/chart\d+\.xml$/i.test(name)) {
+      parts.push({ name, kind: "chart" });
+    }
+  }
+
+  const rank = { slide: 0, notes: 1, diagram: 2, chart: 3 };
+  parts.sort((x, y) =>
+    (rank[x.kind] - rank[y.kind]) || naturalPartSort(x.name, y.name)
+  );
+
+  return parts;
+}
+
+function pptxTextElementsInParagraph(para) {
+  return Array.from(para.getElementsByTagNameNS(A, "t"))
+    .filter(e => e.textContent !== "");
+}
+
+function pptxRunSignature(textEl) {
+  const parent = textEl.parentElement;
+  if (!parent) return "";
+
+  const rPr = Array.from(parent.children || [])
+    .find(e => e.namespaceURI === A && e.localName === "rPr");
+
+  const props = rPr ? new XMLSerializer().serializeToString(rPr) : "";
+  return `${parent.localName}|${props}`;
+}
+
+function pptxParagraphNeedsRunLevelUnits(para, textEls) {
+  if (textEls.length <= 1) return false;
+
+  // Preserve explicit line breaks and fields exactly.
+  const descendants = Array.from(para.getElementsByTagNameNS(A, "*"));
+  if (descendants.some(e => e.localName === "br" || e.localName === "fld")) {
+    return true;
+  }
+
+  // If formatting differs between runs, keep the runs separate so bold,
+  // superscript, hyperlinks, etc. are not silently flattened.
+  const signatures = new Set(textEls.map(pptxRunSignature));
+  return signatures.size > 1;
+}
+
+function pptxUnitsInDocument(doc, includeChartCache = false) {
+  const units = [];
+
+  for (const para of doc.getElementsByTagNameNS(A, "p")) {
+    const textEls = pptxTextElementsInParagraph(para);
+    if (!textEls.length) continue;
+
+    const sourceText = textEls.map(e => e.textContent).join("");
+    if (!hasChinese(sourceText)) continue;
+
+    if (pptxParagraphNeedsRunLevelUnits(para, textEls)) {
+      for (const textEl of textEls) {
+        if (!hasChinese(textEl.textContent)) continue;
+        units.push({
+          kind: "run",
+          text: textEl.textContent,
+          textEls: [textEl],
+          anchor: textEl
+        });
+      }
+    } else {
+      units.push({
+        kind: "paragraph",
+        text: sourceText,
+        textEls,
+        anchor: textEls[0]
+      });
+    }
+  }
+
+  if (includeChartCache) {
+    // Some chart category/series labels are stored as cached strings in c:v
+    // rather than DrawingML a:t nodes. Translate Chinese cached labels only.
+    for (const v of doc.getElementsByTagNameNS(C, "v")) {
+      if (!hasChinese(v.textContent)) continue;
+      units.push({
+        kind: "chart-cache",
+        text: v.textContent,
+        textEls: [v],
+        anchor: v
+      });
+    }
+  }
+
+  return units;
+}
+
+function enableAutofitForTextElement(textEl, doc) {
+  let node = textEl.parentElement;
+  let txBody = null;
+
+  while (node) {
+    if (node.localName === "txBody") {
+      txBody = node;
+      break;
+    }
+    node = node.parentElement;
+  }
+
+  if (!txBody) return;
+
+  const bodyPr = Array.from(txBody.children || [])
+    .find(e => e.namespaceURI === A && e.localName === "bodyPr");
+
+  if (!bodyPr) return;
+
+  for (const child of Array.from(bodyPr.children || [])) {
+    if (
+      child.namespaceURI === A &&
+      ["noAutofit", "normAutofit", "spAutoFit"].includes(child.localName)
+    ) {
+      bodyPr.removeChild(child);
+    }
+  }
+
+  const normAutofit = doc.createElementNS(A, "a:normAutofit");
+  bodyPr.appendChild(normAutofit);
+}
+
+async function extractPptx(buffer, options) {
+  const zip = await JSZip.loadAsync(buffer);
+
+  if (!zip.files["ppt/presentation.xml"]) {
+    throw new Error("This does not appear to be a valid .pptx file.");
+  }
+
+  const parts = getPptxParts(zip, options);
+  const lines = [];
+  const ids = new Set();
+  const sourceMap = new Map();
+  let nextId = 0;
+
+  let slideCount = 0;
+  let notesCount = 0;
+  let chartCount = 0;
+  let diagramCount = 0;
+
+  for (const part of parts) {
+    const doc = parseXml(await zip.files[part.name].async("string"));
+    const units = pptxUnitsInDocument(doc, part.kind === "chart");
+
+    if (part.kind === "slide") slideCount++;
+    if (part.kind === "notes") notesCount++;
+    if (part.kind === "chart") chartCount++;
+    if (part.kind === "diagram") diagramCount++;
+
+    for (const unit of units) {
+      const id = nextId++;
+      ids.add(id);
+      sourceMap.set(id, unit.text);
+      lines.push(`${id}|${unit.text}`);
+    }
+  }
+
+  const detailBits = [`${slideCount} slides`, `${lines.length} Chinese text units`];
+  if (options.notes) detailBits.push(`${notesCount} note parts`);
+  if (diagramCount) detailBits.push(`${diagramCount} SmartArt parts`);
+  if (options.charts) detailBits.push(`${chartCount} charts`);
+
+  return {
+    text: lines.join("\n"),
+    nGroups: lines.length,
+    ids,
+    sourceMap,
+    detail: detailBits.join(" · ")
+  };
+}
+
+async function buildPptxTranslated(buffer, tmap, options) {
+  const zip = await JSZip.loadAsync(buffer);
+  const parts = getPptxParts(zip, options);
+
+  let nextId = 0;
+  let replacedTotal = 0;
+
+  for (const part of parts) {
+    const doc = parseXml(await zip.files[part.name].async("string"));
+    const units = pptxUnitsInDocument(doc, part.kind === "chart");
+    let modified = false;
+
+    for (const unit of units) {
+      const id = nextId++;
+      if (!tmap.has(id)) continue;
+
+      const translated = tmap.get(id);
+
+      if (unit.kind === "paragraph") {
+        unit.textEls[0].textContent = translated;
+        unit.textEls[0].setAttributeNS(XML_NS, "xml:space", "preserve");
+        unit.textEls.slice(1).forEach(e => { e.textContent = ""; });
+      } else {
+        unit.textEls[0].textContent = translated;
+        if (unit.textEls[0].namespaceURI === A) {
+          unit.textEls[0].setAttributeNS(XML_NS, "xml:space", "preserve");
+        }
+      }
+
+      if (options.autofit && unit.anchor?.namespaceURI === A) {
+        enableAutofitForTextElement(unit.anchor, doc);
+      }
+
+      replacedTotal++;
+      modified = true;
+    }
+
+    if (modified) {
+      zip.file(part.name, serializeXml(doc));
+    }
+  }
+
+  const blob = await zip.generateAsync({
+    type: "blob",
+    mimeType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    compression: "DEFLATE"
+  });
+
+  return { blob, replacedTotal };
+}
+
 // ── Drop zone ────────────────────────────────────────────────────────────────
 
 const dz = document.getElementById("dropzone");
 const fi = document.getElementById("fileInput");
 const translatedInput = document.getElementById("translatedInput");
 const outputFilename = document.getElementById("outputFilename");
+const fileMeta = document.getElementById("fileMeta");
+const pptxOptions = document.getElementById("pptxOptions");
+const btnBuild = document.getElementById("btnBuild");
 
 dz.addEventListener("click", () => fi.click());
 
@@ -913,19 +1213,23 @@ dz.addEventListener("drop", e => {
 });
 
 function setFile(f) {
-  if (!/\.docx$/i.test(f.name)) {
-    setStatus("s1", "Not a .docx file", "err");
+  const kind = getFileKind(f.name);
+
+  if (!kind) {
+    setStatus("s1", "Please choose a .docx or .pptx file.", "err");
     return;
   }
 
   const reader = new FileReader();
 
   reader.onload = e => {
-    docxBuffer = e.target.result;
+    officeBuffer = e.target.result;
     originalFilename = f.name;
+    fileKind = kind;
 
     extractedIds = new Set();
     extractedSource = new Map();
+    extractedPptxOptions = null;
     filenameWasEdited = false;
     resetIncompleteApproval();
 
@@ -936,16 +1240,29 @@ function setFile(f) {
     outputFilename.value = "";
 
     document.getElementById("btnExtract").disabled = false;
-    document.getElementById("btnBuild").disabled = true;
+    btnBuild.disabled = true;
+    btnBuild.textContent = kind === "pptx"
+      ? "Build translated .pptx"
+      : "Build translated .docx";
 
     document.getElementById("b1").className = "badge active";
     document.getElementById("b2").className = "badge";
+
+    pptxOptions.hidden = kind !== "pptx";
+    setPptxOptionsLocked(false);
+
+    const sizeMb = (f.size / (1024 * 1024)).toFixed(2);
+    fileMeta.textContent = `${kind.toUpperCase()} · ${sizeMb} MB`;
 
     hideMissingWarning();
     updateValidationSummary();
 
     setStatus("s1", "");
     setStatus("s2", "");
+  };
+
+  reader.onerror = () => {
+    setStatus("s1", "Could not read the selected file.", "err");
   };
 
   reader.readAsArrayBuffer(f);
@@ -957,7 +1274,7 @@ translatedInput.addEventListener("input", () => {
   const { filename } = parseTranslationResponse(translatedInput.value);
 
   if (filename && !filenameWasEdited) {
-    outputFilename.value = stripDocxExtension(filename);
+    outputFilename.value = stripOfficeExtension(filename);
   }
 
   // Any edit invalidates the previous incomplete-build approval.
@@ -992,7 +1309,7 @@ document.getElementById("btnCopyMissing").addEventListener("click", async () => 
 
     setStatus(
       "warningStatus",
-      `✓ Continuation prompt copied with ${result.missing.length} missing paragraphs. Paste it into the AI, then append the response here.`,
+      `✓ Continuation prompt copied with ${result.missing.length} missing text units. Paste it into the AI, then append the response here.`,
       "ok"
     );
   } catch (e) {
@@ -1023,25 +1340,32 @@ document.getElementById("btnContinue").addEventListener("click", () => {
 });
 
 async function doExtract() {
-  if (!docxBuffer) return;
+  if (!officeBuffer || !fileKind) return;
 
   const btn = document.getElementById("btnExtract");
   btn.disabled = true;
 
-  setStatus("s1", "Extracting…");
+  setStatus("s1", `Extracting ${fileKind.toUpperCase()}…`);
 
   try {
-    const { text, nGroups, ids, sourceMap } =
-      await extractRuns(docxBuffer);
+    let result;
 
-    extractedIds = ids;
-    extractedSource = sourceMap;
+    if (fileKind === "docx") {
+      result = await extractDocx(officeBuffer);
+    } else {
+      extractedPptxOptions = getPptxOptionsFromUi();
+      result = await extractPptx(officeBuffer, extractedPptxOptions);
+      setPptxOptionsLocked(true);
+    }
+
+    extractedIds = result.ids;
+    extractedSource = result.sourceMap;
     resetIncompleteApproval();
     hideMissingWarning();
 
     const promptText = PROMPT
-      + "FILENAME|" + stripDocxExtension(originalFilename) + "\n"
-      + text;
+      + "FILENAME|" + stripOfficeExtension(originalFilename) + "\n"
+      + result.text;
 
     let copied = false;
 
@@ -1054,24 +1378,26 @@ async function doExtract() {
 
     document.getElementById("b1").className = "badge done";
     document.getElementById("b2").className = "badge active";
-    document.getElementById("btnBuild").disabled = false;
+    btnBuild.disabled = false;
 
+    fileMeta.textContent = `${fileKind.toUpperCase()} · ${result.detail}`;
     updateValidationSummary();
 
     if (copied) {
       setStatus(
         "s1",
-        `✓ ${nGroups} paragraphs extracted — prompt, filename, and text copied to clipboard!`,
+        `✓ ${result.nGroups} text units extracted — prompt, filename, and text copied to clipboard!`,
         "ok"
       );
     } else {
       setStatus(
         "s1",
-        `✓ ${nGroups} paragraphs extracted, but clipboard access was denied. Please allow clipboard access and try again.`,
+        `✓ ${result.nGroups} text units extracted, but clipboard access was denied. Please allow clipboard access and extract again.`,
         "err"
       );
     }
   } catch (e) {
+    if (fileKind === "pptx") setPptxOptionsLocked(false);
     setStatus("s1", "Error: " + e.message, "err");
   } finally {
     btn.disabled = false;
@@ -1086,30 +1412,30 @@ async function doBuild() {
     return;
   }
 
-  if (!docxBuffer) {
+  if (!officeBuffer || !fileKind) {
     setStatus("s2", "Upload a file first (Step 1).", "err");
+    return;
+  }
+
+  if (extractedIds.size === 0) {
+    setStatus("s2", "Extract the file first (Step 1).", "err");
     return;
   }
 
   const { filename, tmap } = parseTranslationResponse(translated);
 
-  if (tmap.size === 0 && extractedIds.size > 0) {
+  if (tmap.size === 0) {
     setStatus(
       "s2",
-      "No valid translated paragraph lines were found. Expected id|text.",
+      "No valid translated lines were found. Expected id|text.",
       "err"
     );
     return;
   }
 
-  // ── NEW: Validate every expected paragraph ID ────────────────────────────
-
   const result = validateTranslation(tmap);
 
-  if (
-    !result.complete &&
-    approvedIncompleteText !== translated
-  ) {
+  if (!result.complete && approvedIncompleteText !== translated) {
     showMissingWarning(result);
     return;
   }
@@ -1118,24 +1444,26 @@ async function doBuild() {
   const buildingIncomplete = !result.complete;
   resetIncompleteApproval();
 
-  // ── Existing build logic ──────────────────────────────────────────────────
-
   const chosenName = outputFilename.value.trim()
     || filename
-    || stripDocxExtension(originalFilename);
+    || stripOfficeExtension(originalFilename);
 
-  const downloadName = sanitizeFilename(chosenName);
+  const downloadName = sanitizeFilename(chosenName, fileKind);
 
-  const btn = document.getElementById("btnBuild");
-  btn.disabled = true;
-
-  setStatus("s2", "Building…");
+  btnBuild.disabled = true;
+  setStatus("s2", `Building translated ${fileKind.toUpperCase()}…`);
 
   try {
-    const { blob, replacedTotal } =
-      await buildTranslated(docxBuffer, tmap);
+    let buildResult;
 
-    const url = URL.createObjectURL(blob);
+    if (fileKind === "docx") {
+      buildResult = await buildDocxTranslated(officeBuffer, tmap);
+    } else {
+      const options = extractedPptxOptions || getPptxOptionsFromUi();
+      buildResult = await buildPptxTranslated(officeBuffer, tmap, options);
+    }
+
+    const url = URL.createObjectURL(buildResult.blob);
     const a = document.createElement("a");
 
     a.href = url;
@@ -1152,22 +1480,22 @@ async function doBuild() {
     if (buildingIncomplete) {
       setStatus(
         "s2",
-        `⚠ ${replacedTotal} paragraphs replaced. `
-        + `${result.missing.length} missing paragraphs remain unchanged. `
+        `⚠ ${buildResult.replacedTotal} text units replaced. `
+        + `${result.missing.length} missing units remain unchanged. `
         + `Download started: ${downloadName}`,
         "err"
       );
     } else {
       setStatus(
         "s2",
-        `✓ ${replacedTotal} paragraphs replaced. Download started: ${downloadName}`,
+        `✓ ${buildResult.replacedTotal} text units replaced. Download started: ${downloadName}`,
         "ok"
       );
     }
   } catch (e) {
     setStatus("s2", "Error: " + e.message, "err");
   } finally {
-    btn.disabled = false;
+    btnBuild.disabled = false;
   }
 }
 </script>
