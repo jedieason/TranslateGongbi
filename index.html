@@ -400,6 +400,276 @@ h1 {
   flex-wrap: wrap;
 }
 
+
+/* ── Extract actions + visual guide ───────────────────────────────────────── */
+
+.upload-card {
+  padding-bottom: 16px;
+}
+
+.build-card {
+  padding-bottom: 22px;
+}
+
+.extract-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.extract-actions .btn {
+  flex: 0 0 auto;
+}
+
+.btn-info {
+  padding: 6px 2px;
+  border-radius: 6px;
+  background: transparent;
+  color: #94a3b8;
+  border: none;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.btn-info:hover {
+  color: #2563eb;
+  background: transparent;
+}
+
+.btn-info:focus-visible {
+  outline: 3px solid rgba(37, 99, 235, .18);
+  outline-offset: 2px;
+}
+
+#s1:empty,
+#s2:empty,
+#validationSummary:empty {
+  display: none;
+}
+
+.guide-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(15, 23, 42, .32);
+  backdrop-filter: blur(3px);
+}
+
+.guide-modal[hidden] {
+  display: none;
+}
+
+.guide-dialog {
+  width: min(680px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 18px;
+  box-shadow: 0 24px 70px rgba(15, 23, 42, .18);
+}
+
+.guide-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 24px 17px;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.guide-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 7px;
+  color: #2563eb;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.guide-title {
+  color: #111827;
+  font-size: 18px;
+  font-weight: 750;
+  letter-spacing: -.25px;
+}
+
+.guide-subtitle {
+  max-width: 500px;
+  margin-top: 5px;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.guide-close {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 9px;
+  background: #fff;
+  color: #64748b;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.guide-close:hover {
+  background: #f8fafc;
+  color: #111827;
+}
+
+.guide-body {
+  padding: 22px 24px 24px;
+}
+
+.guide-flow {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0;
+  align-items: start;
+}
+
+.guide-step {
+  position: relative;
+  min-width: 0;
+  text-align: center;
+}
+
+.guide-step:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  top: 20px;
+  left: calc(50% + 24px);
+  right: calc(-50% + 24px);
+  height: 1px;
+  background: #dbe4ef;
+}
+
+.guide-step-icon {
+  position: relative;
+  z-index: 1;
+  width: 42px;
+  height: 42px;
+  margin: 0 auto 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #dbeafe;
+  border-radius: 12px;
+  background: #f8fbff;
+  color: #2563eb;
+}
+
+.guide-step-icon svg {
+  width: 19px;
+  height: 19px;
+  stroke: currentColor;
+}
+
+.guide-step-num {
+  color: #94a3b8;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.guide-step-title {
+  display: block;
+  margin-top: 3px;
+  color: #1f2937;
+  font-size: 11px;
+  font-weight: 750;
+  line-height: 1.3;
+}
+
+.guide-step-desc {
+  display: block;
+  margin: 4px auto 0;
+  max-width: 105px;
+  color: #94a3b8;
+  font-size: 9.5px;
+  line-height: 1.4;
+}
+
+.guide-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.guide-detail {
+  padding: 13px 14px;
+  border: 1px solid #e7ebf0;
+  border-radius: 11px;
+  background: #fafbfc;
+}
+
+.guide-detail strong {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #334155;
+  font-size: 10.5px;
+  font-weight: 750;
+}
+
+.guide-detail strong svg {
+  width: 15px;
+  height: 15px;
+  color: #64748b;
+  stroke: currentColor;
+}
+
+.guide-detail p {
+  margin-top: 5px;
+  color: #64748b;
+  font-size: 9.5px;
+  line-height: 1.5;
+}
+
+.guide-tip {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-top: 12px;
+  padding: 11px 13px;
+  border: 1px solid #dbeafe;
+  border-radius: 10px;
+  background: #f8fbff;
+  color: #475569;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+.guide-tip-dot {
+  width: 7px;
+  height: 7px;
+  margin-top: 4px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #2563eb;
+}
+
+body.guide-open {
+  overflow: hidden;
+}
+
+
 textarea, .text-input {
   width: 100%;
   border: 1px solid #e0e0e0;
@@ -524,6 +794,25 @@ textarea:focus, .text-input:focus {
   color: #991b1b;
 }
 
+.footer {
+  margin-top: 28px;
+  color: #b3bac5;
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.footer a {
+  color: inherit;
+  text-decoration: none;
+  font-weight: inherit;
+}
+
+.footer a:hover {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
 @media (max-width: 480px) {
   .summary-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .metric { padding: 9px 10px; }
@@ -533,7 +822,21 @@ textarea:focus, .text-input:focus {
 
   body { padding: 24px 12px 60px; }
   .card { padding: 18px 16px; }
+  .build-card { padding-bottom: 16px; }
   .btn-row .btn { flex: 1 1 auto; justify-content: center; }
+  .extract-actions .btn { flex: 0 0 auto; }
+  .guide-modal { padding: 12px; align-items: flex-start; }
+  .guide-dialog { max-height: calc(100vh - 24px); border-radius: 14px; }
+  .guide-head { padding: 18px 18px 14px; }
+  .guide-body { padding: 18px; }
+  .guide-flow { grid-template-columns: 1fr; gap: 12px; }
+  .guide-step { display: grid; grid-template-columns: 42px 1fr; grid-template-rows: auto auto auto; column-gap: 12px; text-align: left; }
+  .guide-step:not(:last-child)::after { top: 42px; left: 20px; right: auto; width: 1px; height: calc(100% + 12px); }
+  .guide-step-icon { grid-row: 1 / 4; grid-column: 1; margin: 0; }
+  .guide-step-num, .guide-step-title, .guide-step-desc { grid-column: 2; }
+  .guide-step-num { align-self: end; }
+  .guide-step-desc { max-width: none; margin: 3px 0 0; }
+  .guide-detail-grid { grid-template-columns: 1fr; margin-top: 20px; }
 }
 </style>
 </head>
@@ -545,7 +848,7 @@ textarea:focus, .text-input:focus {
 <div class="steps">
 
   <!-- Step 1 -->
-  <div class="card">
+  <div class="card upload-card">
     <div class="step-header">
       <div class="badge active" id="b1">1</div>
       <span class="step-title">Upload &amp; Extract</span>
@@ -628,17 +931,27 @@ textarea:focus, .text-input:focus {
       </div>
     </div>
 
-    <div class="btn-row">
+    <div class="extract-actions">
       <button class="btn btn-primary" id="btnExtract" disabled>
         Extract text
       </button>
+
+      <button
+        class="btn btn-info"
+        id="btnGuide"
+        type="button"
+        aria-label="How it works"
+        aria-haspopup="dialog"
+        aria-controls="guideModal"
+        title="How it works"
+      >Learn how it works</button>
     </div>
 
     <div class="status" id="s1"></div>
   </div>
 
   <!-- Step 2 -->
-  <div class="card">
+  <div class="card build-card">
     <div class="step-header">
       <div class="badge" id="b2">2</div>
       <span class="step-title">Paste &amp; Build</span>
@@ -717,6 +1030,111 @@ textarea:focus, .text-input:focus {
   </div>
 
 </div>
+
+<div class="guide-modal" id="guideModal" hidden>
+  <div
+    class="guide-dialog"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="guideTitle"
+    aria-describedby="guideSubtitle"
+  >
+    <div class="guide-head">
+      <div>
+        <div class="guide-kicker">Quick guide</div>
+        <div class="guide-title" id="guideTitle">How GongBi Translator works</div>
+        <div class="guide-subtitle" id="guideSubtitle">
+          Your Office file stays in the browser. Extract the Chinese text, let your AI translate it, then rebuild the original file with the English text inserted back into place.
+        </div>
+      </div>
+      <button class="guide-close" id="btnGuideClose" type="button" aria-label="Close guide">×</button>
+    </div>
+
+    <div class="guide-body">
+      <div class="guide-flow" aria-label="Five-step workflow">
+        <div class="guide-step">
+          <div class="guide-step-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/></svg>
+          </div>
+          <span class="guide-step-num">Step 1</span>
+          <span class="guide-step-title">Upload</span>
+          <span class="guide-step-desc">Choose a DOCX or PPTX file.</span>
+        </div>
+
+        <div class="guide-step">
+          <div class="guide-step-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16"/><path d="M4 12h10"/><path d="M4 18h7"/><path d="m17 15 3 3-3 3"/><path d="M14 18h6"/></svg>
+          </div>
+          <span class="guide-step-num">Step 2</span>
+          <span class="guide-step-title">Extract</span>
+          <span class="guide-step-desc">Click Extract text. The AI prompt is copied.</span>
+        </div>
+
+        <div class="guide-step">
+          <div class="guide-step-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 11.5c0 4.142-3.582 7.5-8 7.5a8.88 8.88 0 0 1-3.469-.689L4 20l1.367-3.19A7.28 7.28 0 0 1 4 11.5C4 7.358 7.582 4 12 4s8 3.358 8 7.5Z"/><path d="M8.5 10h7"/><path d="M8.5 13.5h4.5"/></svg>
+          </div>
+          <span class="guide-step-num">Step 3</span>
+          <span class="guide-step-title">Translate</span>
+          <span class="guide-step-desc">Paste the prompt into your AI and run it.</span>
+        </div>
+
+        <div class="guide-step">
+          <div class="guide-step-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="4" width="14" height="16" rx="2"/><path d="M9 9h6"/><path d="M9 13h6"/><path d="M9 17h3"/></svg>
+          </div>
+          <span class="guide-step-num">Step 4</span>
+          <span class="guide-step-title">Paste back</span>
+          <span class="guide-step-desc">Paste the AI response into Step 2.</span>
+        </div>
+
+        <div class="guide-step">
+          <div class="guide-step-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v12"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>
+          </div>
+          <span class="guide-step-num">Step 5</span>
+          <span class="guide-step-title">Build &amp; download</span>
+          <span class="guide-step-desc">Rebuild the translated Office file.</span>
+        </div>
+      </div>
+
+      <div class="guide-detail-grid">
+        <div class="guide-detail">
+          <strong>
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M4 12h11"/><path d="M4 17h8"/></svg>
+            What gets extracted
+          </strong>
+          <p>Chinese text is collected from supported Word and PowerPoint text parts. PPTX can also include speaker notes, charts, and SmartArt.</p>
+        </div>
+
+        <div class="guide-detail">
+          <strong>
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8"/><path d="M9 3v3h6V3"/><rect x="5" y="5" width="14" height="16" rx="2"/><path d="m9 14 2 2 4-5"/></svg>
+            Translation matching
+          </strong>
+          <p>Every text unit has a numeric ID. The returned English is matched to those IDs so the correct text goes back to the correct place.</p>
+        </div>
+
+        <div class="guide-detail">
+          <strong>
+            <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 7v5c0 5 3.4 8 8 9 4.6-1 8-4 8-9V7l-8-4Z"/><path d="m9 12 2 2 4-4"/></svg>
+            Formatting preserved
+          </strong>
+          <p>The file is rebuilt in the browser while keeping the original Office structure and formatting wherever possible.</p>
+        </div>
+      </div>
+
+      <div class="guide-tip">
+        <span class="guide-tip-dot" aria-hidden="true"></span>
+        <span><strong>Tip:</strong> If the AI response stops early, paste the partial result first. GongBi can identify the missing IDs and generate a continuation prompt for only the untranslated text.</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<footer class="footer">
+  © 2026 <a href="https://www.instagram.com/jedieason/" target="_blank" rel="noopener noreferrer">Jedieason</a></footer>
+
 
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 
@@ -1615,6 +2033,37 @@ outputFilename.addEventListener("input", () => {
 
 document.getElementById("btnExtract").addEventListener("click", doExtract);
 document.getElementById("btnBuild").addEventListener("click", doBuild);
+
+const guideModal = document.getElementById("guideModal");
+const btnGuide = document.getElementById("btnGuide");
+const btnGuideClose = document.getElementById("btnGuideClose");
+let guideLastFocus = null;
+
+function openGuide() {
+  guideLastFocus = document.activeElement;
+  guideModal.hidden = false;
+  document.body.classList.add("guide-open");
+  btnGuideClose.focus();
+}
+
+function closeGuide() {
+  guideModal.hidden = true;
+  document.body.classList.remove("guide-open");
+  if (guideLastFocus && typeof guideLastFocus.focus === "function") {
+    guideLastFocus.focus();
+  }
+}
+
+btnGuide.addEventListener("click", openGuide);
+btnGuideClose.addEventListener("click", closeGuide);
+
+guideModal.addEventListener("click", e => {
+  if (e.target === guideModal) closeGuide();
+});
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && !guideModal.hidden) closeGuide();
+});
 
 document.getElementById("btnCopyMissing").addEventListener("click", async () => {
   const { tmap } = parseTranslationResponse(translatedInput.value);
