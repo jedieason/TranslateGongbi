@@ -1112,7 +1112,7 @@ textarea:focus, .text-input:focus {
             <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8"/><path d="M9 3v3h6V3"/><rect x="5" y="5" width="14" height="16" rx="2"/><path d="m9 14 2 2 4-5"/></svg>
             Translation matching
           </strong>
-          <p>Every text unit has a numeric ID. The returned English is matched to those IDs so the correct text goes back to the correct place.</p>
+          <p>Every text unit has a numeric ID. For Word, highlighted phrases also carry protected inline IDs to preserve their positions after translation.</p>
         </div>
 
         <div class="guide-detail">
@@ -1120,7 +1120,7 @@ textarea:focus, .text-input:focus {
             <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 7v5c0 5 3.4 8 8 9 4.6-1 8-4 8-9V7l-8-4Z"/><path d="m9 12 2 2 4-4"/></svg>
             Formatting preserved
           </strong>
-          <p>The file is rebuilt in the browser while keeping the original Office structure and formatting wherever possible.</p>
+          <p>Word highlights are carried through protected AI tags and validated before reconstruction; other Office formatting is retained wherever possible.</p>
         </div>
       </div>
 
@@ -1208,6 +1208,20 @@ CAPITALIZATION:
 SOURCE TEXT:
 `;
 
+// The highlight tags are a transport format for AI, NOT HTML content in Word.
+// IDs are local to each paragraph. Colors and IDs are verified against the original.
+const DOCX_MARKUP_INSTRUCTIONS = `DOCX HIGHLIGHT PRESERVATION (IMPORTANT):
+- Some DOCX lines contain inline tags like <hl id="1" color="yellow">發炎反應</hl>.
+- These tags mark exactly which source phrases are highlighted in Word.
+- Translate the WHOLE numbered paragraph naturally; the highlighted English phrase may move anywhere in the translated sentence to preserve natural English word order.
+- Keep each opening <hl id="N" color="COLOR"> and closing </hl> tag as literal markup, including its exact ID and color. Do not escape the tags (no &lt; or &gt;), alter their attributes, omit them, duplicate them, or invent new ones.
+- Wrap the English words that express the original highlighted meaning. Never translate the tags themselves, and do not nest tags.
+- Include each source highlight ID exactly once per line, even when several highlighted phrases have the same color.
+- For paragraphs with no <hl> tags, do not add any.
+- Return plain id|English text lines, NOT Markdown/code fences. Preserve all tags in continuation responses too.
+
+`;
+
 // ── State ────────────────────────────────────────────────────────────────────
 
 let officeBuffer = null;
@@ -1215,6 +1229,7 @@ let originalFilename = "";
 let fileKind = ""; // "docx" or "pptx"
 let extractedIds = new Set();
 let extractedSource = new Map();
+let extractedDocxMarkers = new Map(); // DOCX paragraph ID -> protected highlight descriptors
 let filenameWasEdited = false;
 let extractedPptxOptions = null;
 
@@ -1341,10 +1356,23 @@ function parseTranslationResponse(raw) {
 function validateTranslation(tmap) {
   const missing = [...extractedIds].filter(id => !tmap.has(id));
   const unknown = [...tmap.keys()].filter(id => !extractedIds.has(id));
-
+  const invalid = [];
+  if (fileKind === "docx") {
+    for (const [id, translation] of tmap) {
+      if (!extractedIds.has(id)) continue;
+      try {
+        parseDocxMarkedTranslation(
+          translation, extractedDocxMarkers.get(id) || new Map()
+        );
+      } catch (e) {
+        invalid.push({ id, error: e.message });
+      }
+    }
+  }
   return {
-    complete: missing.length === 0,
+    complete: missing.length === 0 && invalid.length === 0,
     missing,
+    invalid,
     unknown,
     translated: extractedIds.size - missing.length,
     total: extractedIds.size
@@ -1382,12 +1410,13 @@ function updateValidationSummary() {
   const result = validateTranslation(tmap);
 
   if (result.complete) {
-    el.textContent = `✓ All ${result.total} text units have translations.`;
+    el.textContent = `✓ All ${result.total} text units validated (including DOCX highlights).`;
     el.className = "validation-summary ok";
   } else {
     el.textContent =
       `${result.translated} / ${result.total} translated · `
-      + `${result.missing.length} missing`;
+      + `${result.missing.length} missing`
+      + (result.invalid.length ? ` · ${result.invalid.length} invalid highlight markup` : "");
 
     el.className = "validation-summary err";
   }
@@ -1438,6 +1467,10 @@ IMPORTANT:
 - Do not include the pipe character | inside the translated text.
 - If a previous response stopped halfway through a unit, regenerate that entire unit rather than continuing its sentence fragment.
 - Return the complete translation for each ID.
+- If the source contains <hl id="N" color="COLOR">...</hl> markup, preserve each ID,
+  original color and literal tag pair exactly once, wrapping the corresponding
+  translated English phrase (tags may move with natural English word order).
+  Never omit, escape, invent, duplicate or nest <hl> tags.
 
 MISSING SOURCE TEXT:
 ${sourceLines.join("\n")}`;
@@ -1466,36 +1499,285 @@ async function copyText(text) {
   }
 }
 
-// ── DOCX: extract/build ──────────────────────────────────────────────────────
+// ── DOCX: paragraph-level translation with lossless highlight markers ─────
 
 // Returns all nonempty Word text elements in a paragraph if it contains Chinese.
-// One group = one whole paragraph.
+// Keep the original paragraph IDs (global position of the first w:t).
 function docxParaGroup(para) {
   const ts = Array.from(para.getElementsByTagNameNS(W, "t"))
     .filter(e => e.textContent !== "");
-
-  if (!ts.length) return [];
-  if (!hasChinese(ts.map(e => e.textContent).join(""))) return [];
-
+  if (!ts.length || !hasChinese(ts.map(e => e.textContent).join(""))) return [];
   return ts;
+}
+
+function docxDirectChild(parent, localName) {
+  if (!parent) return null;
+  return Array.from(parent.children).find(
+    e => e.namespaceURI === W && e.localName === localName
+  ) || null;
+}
+
+function docxWordAttr(el, name) {
+  return el?.getAttributeNS(W, name) ?? el?.getAttribute("w:" + name)
+    ?? el?.getAttribute(name) ?? null;
+}
+
+function docxRunOf(textEl) {
+  let el = textEl.parentElement;
+  while (el && !(el.namespaceURI === W && el.localName === "p")) {
+    if (el.namespaceURI === W && el.localName === "r") return el;
+    el = el.parentElement;
+  }
+  return null;
+}
+
+function docxOwnHighlight(rPr) {
+  const el = docxDirectChild(rPr, "highlight");
+  return el ? docxWordAttr(el, "val") : null;
+}
+
+// Resolve text highlighting from document defaults, paragraph/character styles,
+// and direct run properties. An explicit "none" disables inherited highlighting.
+async function docxHighlightStyles(zip) {
+  const styles = new Map();
+  let docDefault = null;
+  if (!zip.files["word/styles.xml"]) return { styles, docDefault };
+  const doc = parseXml(await zip.files["word/styles.xml"].async("string"));
+  const defaults = doc.getElementsByTagNameNS(W, "docDefaults")[0];
+  const defaultRPr = defaults && defaults.getElementsByTagNameNS(W, "rPr")[0];
+  docDefault = docxOwnHighlight(defaultRPr);
+
+  for (const style of doc.getElementsByTagNameNS(W, "style")) {
+    const id = docxWordAttr(style, "styleId");
+    if (!id) continue;
+    const rPr = docxDirectChild(style, "rPr");
+    styles.set(id, {
+      parent: docxWordAttr(docxDirectChild(style, "basedOn"), "val"),
+      highlight: docxOwnHighlight(rPr)
+    });
+  }
+  return { styles, docDefault };
+}
+
+function docxStyleHighlight(id, info, seen = new Set()) {
+  if (!id || seen.has(id) || !info.styles.has(id)) return null;
+  seen.add(id);
+  const style = info.styles.get(id);
+  return style.highlight ?? docxStyleHighlight(style.parent, info, seen);
+}
+
+function docxHighlightAt(para, textEl, stylesInfo) {
+  const run = docxRunOf(textEl);
+  if (!run) return null;
+  const runRPr = docxDirectChild(run, "rPr");
+  const pPr = docxDirectChild(para, "pPr");
+  const pStyle = docxWordAttr(docxDirectChild(pPr, "pStyle"), "val");
+  const rStyle = docxWordAttr(docxDirectChild(runRPr, "rStyle"), "val");
+  const value = docxOwnHighlight(runRPr)
+    ?? docxStyleHighlight(rStyle, stylesInfo)
+    ?? docxStyleHighlight(pStyle, stylesInfo)
+    ?? stylesInfo.docDefault;
+  return value && value !== "none" ? value : null;
+}
+
+// Builds one complete, natural-language translation unit per paragraph.
+// Only highlighted ranges are surrounded by semantic, ID-bearing <hl> tags.
+// The descriptors retain their source run for exact w:rPr reconstruction.
+function docxMarkedParagraph(para, group, stylesInfo) {
+  const descriptors = new Map();
+  let source = "";
+  let current = null;
+  let nextMarker = 1;
+  let previousRun = null;
+  let previousSignature = null;
+
+  for (const textEl of group) {
+    const run = docxRunOf(textEl);
+    const color = docxHighlightAt(para, textEl, stylesInfo);
+    const rPr = docxDirectChild(run, "rPr");
+    const signature = rPr ? new XMLSerializer().serializeToString(rPr) : "";
+    // Merge adjacent text from identically formatted highlight runs, except
+    // across non-text content such as tabs/line breaks/drawings.
+    const continuous = previousRun && run && (
+      previousRun === run || previousRun.nextElementSibling === run
+    );
+    if (current && (
+      !color || current.color !== color ||
+      previousSignature !== signature || !continuous
+    )) {
+      source += "</hl>";
+      current = null;
+    }
+
+    if (color && !current) {
+      const id = nextMarker++;
+      current = { id, color, run };
+      descriptors.set(id, current);
+      source += `<hl id="${id}" color="${color}">`;
+    }
+    source += textEl.textContent;
+    previousRun = run;
+    previousSignature = signature;
+  }
+  if (current) source += "</hl>";
+  return { source, descriptors };
+}
+
+// Returns text segments {text, highlightId}. Rejects damaged, duplicated or
+// invented tags BEFORE altering the original DOCX. It is safer to require
+// regenerating one translation than silently discard a highlight.
+function parseDocxMarkedTranslation(translated, descriptors) {
+  const chunks = [];
+  const seen = new Set();
+  const tags = /<\/?hl\b[^>]*>/gi;
+  const push = (text, highlightId) => {
+    if (!text) return;
+    if (open && text.trim()) open.hasContent = true;
+    const last = chunks[chunks.length - 1];
+    if (last && last.highlightId === highlightId) last.text += text;
+    else chunks.push({ text, highlightId });
+  };
+
+  let cursor = 0;
+  let open = null;
+  let match;
+  while ((match = tags.exec(translated)) !== null) {
+    const between = translated.slice(cursor, match.index);
+    // A partial/escaped tag is a broken AI output, not literal translated text.
+    if (/<\/?hl\b|&lt;\/?hl\b/i.test(between)) {
+      throw new Error("Malformed or HTML-escaped highlight tag.");
+    }
+    push(between, open ? open.id : null);
+    const tag = match[0];
+    if (/^<\/hl\s*>$/i.test(tag)) {
+      if (!open) throw new Error("Unexpected </hl> closing tag.");
+      if (!open.hasContent) throw new Error(`Highlight ${open.id} has no translated text.`);
+      seen.add(open.id);
+      open = null;
+    } else {
+      if (open) throw new Error("Nested <hl> tags are not allowed.");
+      const parsed = /^<hl\s+id="(\d+)"\s+color="([a-zA-Z]+)"\s*>$/i.exec(tag);
+      if (!parsed) throw new Error(`Invalid tag syntax: ${tag}`);
+      const id = Number(parsed[1]);
+      const spec = descriptors.get(id);
+      if (!spec) throw new Error(`Unexpected highlight ID ${id}.`);
+      if (seen.has(id)) throw new Error(`Highlight ID ${id} is duplicated.`);
+      if (spec.color.toLowerCase() !== parsed[2].toLowerCase()) {
+        throw new Error(`Highlight ${id} must keep its original ${spec.color} color.`);
+      }
+      open = { id, hasContent: false };
+    }
+    cursor = tags.lastIndex;
+  }
+  const tail = translated.slice(cursor);
+  if (/<\/?hl\b|&lt;\/?hl\b/i.test(tail)) {
+    throw new Error("Malformed or HTML-escaped highlight tag.");
+  }
+  push(tail, open ? open.id : null);
+  if (open) throw new Error(`Highlight ${open.id} is missing its closing </hl> tag.`);
+  for (const [id] of descriptors) {
+    if (!seen.has(id)) throw new Error(`Original highlight ID ${id} is missing.`);
+  }
+  if (chunks.some(c => c.highlightId !== null && !c.text.trim())) {
+    throw new Error("A highlight tag may not contain only whitespace.");
+  }
+  return chunks;
+}
+
+// OOXML run property order matters to strict WordprocessingML readers.
+const DOCX_RPR_ORDER = [
+  "rStyle", "rFonts", "b", "bCs", "i", "iCs", "caps", "smallCaps",
+  "strike", "dstrike", "outline", "shadow", "emboss", "imprint", "noProof",
+  "snapToGrid", "vanish", "webHidden", "color", "spacing", "w", "kern",
+  "position", "sz", "szCs", "highlight", "u", "effect", "bdr", "shd",
+  "fitText", "vertAlign", "rtl", "cs", "em", "lang", "eastAsianLayout",
+  "specVanish", "oMath"
+];
+
+function docxInsertRunProperty(rPr, property) {
+  const index = DOCX_RPR_ORDER.indexOf(property.localName);
+  const next = Array.from(rPr.children).find(el => {
+    const order = DOCX_RPR_ORDER.indexOf(el.localName);
+    return order >= 0 && order > index;
+  });
+  rPr.insertBefore(property, next || null);
+}
+
+function docxSetRunFontAndHighlight(doc, run, color) {
+  let rPr = docxDirectChild(run, "rPr");
+  if (!rPr) {
+    rPr = doc.createElementNS(W, "w:rPr");
+    run.insertBefore(rPr, run.firstChild);
+  }
+  let rFonts = docxDirectChild(rPr, "rFonts");
+  if (!rFonts) {
+    rFonts = doc.createElementNS(W, "w:rFonts");
+    docxInsertRunProperty(rPr, rFonts);
+  }
+  for (const key of ["ascii", "hAnsi", "eastAsia", "cs"]) {
+    rFonts.setAttributeNS(W, `w:${key}`, "Times New Roman");
+  }
+  // Explicitly override any inherited formatting: "none" is the off value.
+  let hl = docxDirectChild(rPr, "highlight");
+  if (!hl) {
+    hl = doc.createElementNS(W, "w:highlight");
+    docxInsertRunProperty(rPr, hl);
+  }
+  hl.setAttributeNS(W, "w:val", color || "none");
+}
+
+function docxNewTextRun(doc, sourceRun, text, color) {
+  const run = doc.createElementNS(W, "w:r");
+  const oldProps = docxDirectChild(sourceRun, "rPr");
+  if (oldProps) run.appendChild(oldProps.cloneNode(true));
+  docxSetRunFontAndHighlight(doc, run, color);
+  const newText = doc.createElementNS(W, "w:t");
+  newText.setAttributeNS(XML_NS, "xml:space", "preserve");
+  newText.textContent = text;
+  run.appendChild(newText);
+  return run;
+}
+
+function docxReplaceMarkedParagraph(doc, para, group, descriptors, chunks) {
+  const firstRun = docxRunOf(group[0]);
+  if (!firstRun || !firstRun.parentNode) {
+    throw new Error("Cannot locate the original Word text run.");
+  }
+  // Select the first originally unhighlighted run as the baseline, otherwise
+  // use the first run and explicitly disable inherited highlighting on plain text.
+  const markedRuns = new Set([...descriptors.values()].map(d => d.run));
+  const baseTextEl = group.find(e => !markedRuns.has(docxRunOf(e)));
+  const baseRun = docxRunOf(baseTextEl || group[0]);
+  const parent = firstRun.parentNode;
+
+  // Insert the new runs at the original text anchor. Leave non-text OOXML
+  // objects (drawings, comments, fields, paragraph settings) in place.
+  for (const chunk of chunks) {
+    if (!chunk.text) continue;
+    const marker = chunk.highlightId === null ? null : descriptors.get(chunk.highlightId);
+    const template = marker ? marker.run : baseRun;
+    parent.insertBefore(docxNewTextRun(doc, template, chunk.text, marker?.color), firstRun);
+  }
+  for (const t of group) {
+    t.textContent = "";
+  }
 }
 
 async function extractDocx(buffer) {
   const zip = await JSZip.loadAsync(buffer);
-
   if (!zip.files["word/document.xml"]) {
     throw new Error("This does not appear to be a valid .docx file.");
   }
-
+  const stylesInfo = await docxHighlightStyles(zip);
   const lines = [];
   const ids = new Set();
   const sourceMap = new Map();
-
+  const markerMap = new Map();
   let globalIdx = 0;
+  let totalHighlights = 0;
 
   for (const part of DOCX_SCAN_PARTS) {
     if (!zip.files[part]) continue;
-
     const doc = parseXml(await zip.files[part].async("string"));
     const allT = Array.from(doc.getElementsByTagNameNS(W, "t"));
     const posOf = new Map(allT.map((e, i) => [e, i]));
@@ -1503,18 +1785,16 @@ async function extractDocx(buffer) {
     for (const para of doc.getElementsByTagNameNS(W, "p")) {
       const group = docxParaGroup(para);
       if (!group.length) continue;
-
       const firstPos = posOf.get(group[0]);
       if (firstPos === undefined) continue;
-
       const id = globalIdx + firstPos;
-      const sourceText = group.map(e => e.textContent).join("");
-
+      const { source, descriptors } = docxMarkedParagraph(para, group, stylesInfo);
       ids.add(id);
-      sourceMap.set(id, sourceText);
-      lines.push(`${id}|${sourceText}`);
+      sourceMap.set(id, source);
+      markerMap.set(id, descriptors);
+      totalHighlights += descriptors.size;
+      lines.push(`${id}|${source}`);
     }
-
     globalIdx += allT.length;
   }
 
@@ -1523,71 +1803,42 @@ async function extractDocx(buffer) {
     nGroups: lines.length,
     ids,
     sourceMap,
-    detail: `${lines.length} Chinese paragraphs found`
+    markerMap,
+    detail: `${lines.length} Chinese paragraphs · ${totalHighlights} protected highlights`
   };
 }
 
 async function buildDocxTranslated(buffer, tmap) {
   const zip = await JSZip.loadAsync(buffer);
-
+  const stylesInfo = await docxHighlightStyles(zip);
   let globalIdx = 0;
   let replacedTotal = 0;
 
   for (const part of DOCX_SCAN_PARTS) {
     if (!zip.files[part]) continue;
-
     const doc = parseXml(await zip.files[part].async("string"));
     const allT = Array.from(doc.getElementsByTagNameNS(W, "t"));
     const posOf = new Map(allT.map((e, i) => [e, i]));
-
     let replaced = 0;
 
     for (const para of doc.getElementsByTagNameNS(W, "p")) {
       const group = docxParaGroup(para);
       if (!group.length) continue;
-
       const firstPos = posOf.get(group[0]);
       if (firstPos === undefined) continue;
-
       const gi = globalIdx + firstPos;
       if (!tmap.has(gi)) continue;
-
-      // Replace the whole paragraph while keeping the first run's formatting.
-      group[0].textContent = tmap.get(gi);
-      group[0].setAttributeNS(XML_NS, "xml:space", "preserve");
-      group.slice(1).forEach(e => { e.textContent = ""; });
-
-      // Set the first text run's font to Times New Roman, preserving existing behavior.
-      const run = group[0].parentElement;
-
-      if (run && run.localName === "r") {
-        let rPr = Array.from(run.children)
-          .find(e => e.namespaceURI === W && e.localName === "rPr");
-
-        if (!rPr) {
-          rPr = doc.createElementNS(W, "w:rPr");
-          run.insertBefore(rPr, run.firstChild);
-        }
-
-        let rFonts = Array.from(rPr.children)
-          .find(e => e.namespaceURI === W && e.localName === "rFonts");
-
-        if (!rFonts) {
-          rFonts = doc.createElementNS(W, "w:rFonts");
-          rPr.appendChild(rFonts);
-        }
-
-        rFonts.setAttributeNS(W, "w:ascii", "Times New Roman");
-        rFonts.setAttributeNS(W, "w:hAnsi", "Times New Roman");
-        rFonts.setAttributeNS(W, "w:eastAsia", "Times New Roman");
-        rFonts.setAttributeNS(W, "w:cs", "Times New Roman");
+      const { descriptors } = docxMarkedParagraph(para, group, stylesInfo);
+      let chunks;
+      try {
+        chunks = parseDocxMarkedTranslation(tmap.get(gi), descriptors);
+      } catch (e) {
+        throw new Error(`Paragraph ID ${gi}: ${e.message}`);
       }
-
+      docxReplaceMarkedParagraph(doc, para, group, descriptors, chunks);
       replaced++;
     }
-
     globalIdx += allT.length;
-
     if (replaced > 0) {
       zip.file(part, serializeXml(doc));
       replacedTotal += replaced;
@@ -1595,13 +1846,11 @@ async function buildDocxTranslated(buffer, tmap) {
   }
 
   await convertDocxNumbering(zip);
-
   const blob = await zip.generateAsync({
     type: "blob",
     mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     compression: "DEFLATE"
   });
-
   return { blob, replacedTotal };
 }
 
@@ -1966,6 +2215,7 @@ function setFile(f) {
 
     extractedIds = new Set();
     extractedSource = new Map();
+    extractedDocxMarkers = new Map();
     extractedPptxOptions = null;
     filenameWasEdited = false;
     resetIncompleteApproval();
@@ -2133,10 +2383,14 @@ async function doExtract() {
 
     extractedIds = result.ids;
     extractedSource = result.sourceMap;
+    extractedDocxMarkers = result.markerMap || new Map();
     resetIncompleteApproval();
     hideMissingWarning();
 
-    const promptText = PROMPT
+    const promptPrefix = fileKind === "docx"
+      ? PROMPT.replace(/SOURCE TEXT:\n$/, DOCX_MARKUP_INSTRUCTIONS + "SOURCE TEXT:\n")
+      : PROMPT;
+    const promptText = promptPrefix
       + "FILENAME|" + stripOfficeExtension(originalFilename) + "\n"
       + result.text;
 
@@ -2217,6 +2471,15 @@ async function doBuild() {
   }
 
   const result = validateTranslation(tmap);
+
+  // Invalid highlight tags are not the same as missing translations.
+  // Do not let "Continue anyway" silently strip or misplace formatting.
+  if (result.invalid.length) {
+    const first = result.invalid[0];
+    setStatus("s2", `Highlight markup error at ID ${first.id}: ${first.error}`
+      + (result.invalid.length > 1 ? ` (+${result.invalid.length - 1} more)` : ""), "err");
+    return;
+  }
 
   if (!result.complete && approvedIncompleteText !== translated) {
     showMissingWarning(result);
