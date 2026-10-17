@@ -1254,6 +1254,8 @@ Do not add explanations, comments, headings, or extra lines.
 Do not insert line breaks within a translated unit.
 Do not include the pipe character | inside the translated text.
 The first output line MUST be FILENAME|English filename, followed by the numbered translation lines.
+- Complete all supplied IDs in this ONE response. Do not summarize, skip titles, group labels, captions, or table items. Never replace translated text with a placeholder such as 'same as above'.
+- Privately check that every input ID occurs exactly once in the output before finishing. If the response cannot fit within the model's output limit, return as many complete ID lines as possible; never claim the response is complete if IDs were omitted. The application will identify the remainder.
 
 CAPITALIZATION:
 1. Capitalize the first word of each line when normal English usage calls for it.
@@ -1277,6 +1279,7 @@ const DOCX_MARKUP_INSTRUCTIONS = `DOCX HIGHLIGHT PRESERVATION (IMPORTANT):
 - If a source highlight contains ONLY a space or other whitespace, keep its whitespace inside the original <hl>...</hl> tags unchanged. Such a tag preserves Word spacing and is NOT untranslated content. Do not remove the whitespace.
 - For paragraphs with no <hl> tags, do not add any.
 - Return plain id|English text lines, NOT Markdown/code fences. Preserve all tags in continuation responses too.
+- If Word has split one word into multiple neighboring highlight IDs, you may distribute the translated word across those tags. Do not erase short single-letter tags or replace content with empty tags.
 
 `;
 
@@ -1290,6 +1293,8 @@ let extractedSource = new Map();
 let extractedDocxMarkers = new Map(); // DOCX paragraph ID -> protected highlight descriptors
 let filenameWasEdited = false;
 let extractedPptxOptions = null;
+let lastCopiedPrompt = "";
+let validationTimer = null;
 
 // The incomplete-build decision is valid only for the exact text
 // that was reviewed in the warning.
@@ -1381,6 +1386,27 @@ function setPptxOptionsLocked(locked) {
   document.getElementById("enableAutofit").disabled = locked;
 }
 
+// Repair only syntactic differences that can be unambiguously normalized.
+// Never infer English meaning or invent missing nonempty highlights.
+function normalizeHighlightSyntax(raw) {
+  let text = String(raw ?? "");
+  // AI sometimes HTML-escapes just the protected tags.
+  text = text.replace(/&lt;(\/?hl\b[\s\S]*?)&gt;/gi,
+    (_, tag) => "<" + tag.replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'") + ">");
+  text = text.replace(/<hl\b([^>]*)>/gi, (whole, attributes) => {
+    const id = /\bid\s*=\s*(["'])(\d+)\1/i.exec(attributes);
+    const color = /\bcolor\s*=\s*(["'])([a-zA-Z]+)\1/i.exec(attributes);
+    if (!id || !color) return whole;
+    const remaining = attributes
+      .replace(id[0], "")
+      .replace(color[0], "")
+      .trim();
+    if (remaining) return whole; // Unexpected attributes should be reviewed.
+    return `<hl id="${Number(id[2])}" color="${color[2].toLowerCase()}">`;
+  });
+  return text.replace(/<\/hl\s*>/gi, "</hl>");
+}
+
 function parseTranslationResponse(raw) {
   const tmap = new Map();
   const conflicting = new Map();
@@ -1393,7 +1419,7 @@ function parseTranslationResponse(raw) {
     if (pi === -1) continue;
 
     const key = t.slice(0, pi).trim();
-    const value = t.slice(pi + 1).trim();
+    const value = normalizeHighlightSyntax(t.slice(pi + 1).trim());
 
     if (key.toUpperCase() === "FILENAME") {
       if (value) filename = value;
@@ -1551,7 +1577,7 @@ function updateValidationSummary() {
   const { tmap, duplicates } = parseTranslationResponse(translatedInput.value);
   if (tmap.size === 0) {
     panel.hidden = true;
-    el.textContent = `${extractedIds.size} text units expected.`;
+    el.textContent = "";
     el.className = "validation-summary";
     return;
   }
@@ -1819,6 +1845,7 @@ function docxMarkedParagraph(para, group, stylesInfo) {
 // invented tags BEFORE altering the original DOCX. It is safer to require
 // regenerating one translation than silently discard a highlight.
 function parseDocxMarkedTranslation(translated, descriptors) {
+  translated = normalizeHighlightSyntax(translated);
   const chunks = [];
   const seen = new Set();
   const tags = /<\/?hl\b[^>]*>/gi;
@@ -1879,8 +1906,51 @@ function parseDocxMarkedTranslation(translated, descriptors) {
   }
   push(tail, open ? open.id : null);
   if (open) throw new Error(`Highlight ${open.id} is missing its closing </hl> tag.`);
-  for (const [id] of descriptors) {
-    if (!seen.has(id)) throw new Error(`Original highlight ID ${id} is missing.`);
+  for (const [id, spec] of descriptors) {
+    if (seen.has(id)) continue;
+    const sourceWhitespace = spec.sourceText || "";
+    // A whitespace-only highlight is formatting, not a missing word.
+    // Restore it around an existing plain whitespace without inserting text.
+    if (sourceWhitespace && !sourceWhitespace.trim()) {
+      const originalIds = [...descriptors.keys()];
+      const at = originalIds.indexOf(id);
+      const neighborIds = originalIds.filter((other, index) =>
+        index !== at && seen.has(other) && Math.abs(index - at) <= 1
+      );
+      const candidates = [];
+      chunks.forEach((chunk, index) => {
+        if (chunk.highlightId !== null) return;
+        let offset = chunk.text.indexOf(sourceWhitespace);
+        let length = sourceWhitespace.length;
+        if (offset < 0 && /^\s+$/.test(sourceWhitespace)) {
+          offset = chunk.text.search(/\s/);
+          length = 1;
+        }
+        if (offset < 0) return;
+        let proximity = 10000;
+        for (const neighbor of neighborIds) {
+          chunks.forEach((other, j) => {
+            if (other.highlightId === neighbor) proximity = Math.min(proximity, Math.abs(index - j));
+          });
+        }
+        candidates.push({ index, offset, length, proximity });
+      });
+      candidates.sort((a, b) => a.proximity - b.proximity || a.index - b.index);
+      if (candidates.length) {
+        const { index, offset, length } = candidates[0];
+        const original = chunks[index].text;
+        const additions = [];
+        if (offset) additions.push({ text: original.slice(0, offset), highlightId: null });
+        additions.push({ text: original.slice(offset, offset + length), highlightId: id });
+        if (offset + length < original.length) {
+          additions.push({ text: original.slice(offset + length), highlightId: null });
+        }
+        chunks.splice(index, 1, ...additions);
+        seen.add(id);
+        continue;
+      }
+    }
+    throw new Error(`Original highlight ID ${id} is missing.`);
   }
   if (chunks.some(c => c.highlightId !== null && !c.text.trim()
     && !allowedWhitespace(c.highlightId, c.text))) {
@@ -2422,6 +2492,7 @@ function setFile(f) {
     extractedSource = new Map();
     extractedDocxMarkers = new Map();
     extractedPptxOptions = null;
+    lastCopiedPrompt = "";
     filenameWasEdited = false;
     resetIncompleteApproval();
 
@@ -2435,6 +2506,7 @@ function setFile(f) {
     outputFilename.value = "";
 
     document.getElementById("btnExtract").disabled = false;
+    document.getElementById("btnExtract").textContent = "Extract text";
     btnBuild.disabled = true;
     btnBuild.textContent = kind === "pptx"
       ? "Build translated .pptx"
@@ -2480,7 +2552,8 @@ translatedInput.addEventListener("input", () => {
   // Any edit invalidates the previous incomplete-build approval.
   resetIncompleteApproval();
   hideMissingWarning();
-  updateValidationSummary();
+  clearTimeout(validationTimer);
+  validationTimer = setTimeout(updateValidationSummary, 350);
 });
 
 outputFilename.addEventListener("input", () => {
@@ -2638,6 +2711,15 @@ async function doExtract() {
   if (!officeBuffer || !fileKind) return;
 
   const btn = document.getElementById("btnExtract");
+  if (lastCopiedPrompt) {
+    try {
+      await copyText(lastCopiedPrompt);
+      setStatus("s1", `✓ Full translation prompt copied (${extractedIds.size} text units).`, "ok");
+    } catch (e) {
+      setStatus("s1", `Could not copy: ${e.message}`, "err");
+    }
+    return;
+  }
   btn.disabled = true;
 
   setStatus("s1", `Extracting ${fileKind.toUpperCase()}…`);
@@ -2665,6 +2747,8 @@ async function doExtract() {
     const promptText = promptPrefix
       + "FILENAME|" + stripOfficeExtension(originalFilename) + "\n"
       + result.text;
+    lastCopiedPrompt = promptText;
+    btn.textContent = "Copy prompt";
 
     let copied = false;
 
