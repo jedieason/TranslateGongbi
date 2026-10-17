@@ -723,6 +723,40 @@ textarea:focus, .text-input:focus {
 
 /* ── Translation validation ─────────────────────────────────── */
 
+.repair-panel {
+  margin-top: 15px;
+  padding: 16px;
+  border: 1px solid #f3c48a;
+  background: #fffbeb;
+  border-radius: 11px;
+}
+.repair-panel[hidden] { display: none; }
+.repair-heading { color: #92400e; font-size: 13px; font-weight: 750; }
+.repair-help { color: #92400e; font-size: 11px; line-height: 1.55; margin: 7px 0 12px; }
+.repair-issue-list {
+  max-height: 340px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  margin: 10px 0;
+}
+.repair-issue {
+  background: white;
+  border: 1px solid #f5deb9;
+  border-radius: 8px;
+  padding: 11px;
+  min-width: 0;
+}
+.repair-issue-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: baseline; font-size: 11px; color: #92400e; margin-bottom: 5px; }
+.repair-issue-head strong { font-family: "SF Mono", "Fira Code", monospace; font-size: 12px; color: #111827; }
+.repair-issue-line { font-size: 10px; color: #6b7280; line-height: 1.55; margin-top: 4px; overflow-wrap: anywhere; }
+.repair-issue-line code { color: #374151; white-space: pre-wrap; font-size: 10px; }
+.repair-panel textarea { background: white; margin-top: 10px; }
+.repair-panel .btn-row { margin-top: 10px; }
+.repair-panel .status { color: #92400e; }
+
+
 .validation-summary {
   font-size: 12px;
   line-height: 1.6;
@@ -964,7 +998,8 @@ textarea:focus, .text-input:focus {
 
     <div class="hint">
       You can append multiple AI responses. Blank lines are ignored, and
-      the last nonempty translation for each ID wins.
+      the last nonempty translation for each ID wins. For damaged lines, use the
+      repair panel below to replace an ID directly instead of duplicating it.
     </div>
 
     <label class="field-label" for="outputFilename">
@@ -991,6 +1026,29 @@ textarea:focus, .text-input:focus {
     </div>
 
     <div class="validation-summary" id="validationSummary"></div>
+
+    <!-- Auto-detected errors + targeted translation replacement. -->
+    <section class="repair-panel" id="repairPanel" hidden aria-live="polite">
+      <div class="repair-heading" id="repairHeading">Translation issues detected</div>
+      <p class="repair-help">
+        Review every affected ID below. Copy the targeted prompt, translate only these
+        units, paste the new ID|translation lines, and apply to replace existing lines.
+      </p>
+      <div class="repair-issue-list" id="repairIssueList"></div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btnCopyRepair" type="button">Copy repair prompt</button>
+        <button class="btn btn-secondary" id="btnKeepLatest" type="button" hidden>
+          Keep latest for duplicate IDs
+        </button>
+      </div>
+      <label class="field-label" for="repairInput">Paste replacement translations (ID|English text)</label>
+      <textarea id="repairInput" rows="5" placeholder="5674|Corrected complete English text…"></textarea>
+      <div class="btn-row">
+        <button class="btn btn-green" id="btnApplyRepair" type="button">Replace affected translations</button>
+      </div>
+      <div class="status" id="repairStatus"></div>
+    </section>
+
     <div class="status" id="s2"></div>
 
     <!-- Missing translation warning -->
@@ -1216,6 +1274,7 @@ const DOCX_MARKUP_INSTRUCTIONS = `DOCX HIGHLIGHT PRESERVATION (IMPORTANT):
 - Keep each opening <hl id="N" color="COLOR"> and closing </hl> tag as literal markup, including its exact ID and color. Do not escape the tags (no &lt; or &gt;), alter their attributes, omit them, duplicate them, or invent new ones.
 - Wrap the English words that express the original highlighted meaning. Never translate the tags themselves, and do not nest tags.
 - Include each source highlight ID exactly once per line, even when several highlighted phrases have the same color.
+- If a source highlight contains ONLY a space or other whitespace, keep its whitespace inside the original <hl>...</hl> tags unchanged. Such a tag preserves Word spacing and is NOT untranslated content. Do not remove the whitespace.
 - For paragraphs with no <hl> tags, do not add any.
 - Return plain id|English text lines, NOT Markdown/code fences. Preserve all tags in continuation responses too.
 
@@ -1324,6 +1383,7 @@ function setPptxOptionsLocked(locked) {
 
 function parseTranslationResponse(raw) {
   const tmap = new Map();
+  const conflicting = new Map();
   let filename = "";
 
   for (const line of raw.split(/\r?\n/)) {
@@ -1344,36 +1404,59 @@ function parseTranslationResponse(raw) {
 
     // A later nonempty translation overrides an earlier one.
     // This allows interrupted AI responses to be appended safely.
-    if (value) tmap.set(Number(key), value);
+    if (value) {
+      const id = Number(key);
+      if (tmap.has(id) && tmap.get(id) !== value) {
+        if (!conflicting.has(id)) conflicting.set(id, {
+          id, previous: tmap.get(id), latest: value
+        });
+        else conflicting.get(id).latest = value;
+      }
+      tmap.set(id, value);
+    }
   }
 
-  return { filename, tmap };
+  return { filename, tmap, duplicates: [...conflicting.values()] };
 }
 
 // ── Validation ───────────────────────────────────────────────────────────────
 
-function validateTranslation(tmap) {
+function validateTranslation(tmap, duplicates = []) {
   const missing = [...extractedIds].filter(id => !tmap.has(id));
   const unknown = [...tmap.keys()].filter(id => !extractedIds.has(id));
   const invalid = [];
-  if (fileKind === "docx") {
-    for (const [id, translation] of tmap) {
-      if (!extractedIds.has(id)) continue;
+  const untranslated = [];
+  for (const [id, translation] of tmap) {
+    if (!extractedIds.has(id)) continue;
+    if (fileKind === "docx") {
       try {
         parseDocxMarkedTranslation(
           translation, extractedDocxMarkers.get(id) || new Map()
         );
       } catch (e) {
         invalid.push({ id, error: e.message });
+        continue;
       }
     }
+    // Detect unconverted source-language characters; this is a useful heuristic,
+    // not a guarantee of semantic translation quality.
+    if (hasChinese(translation)) {
+      untranslated.push({ id, error: "Chinese characters remain in the translation." });
+    }
   }
+  const duplicatesInSource = duplicates.filter(item => extractedIds.has(item.id));
+  const flagged = new Set([
+    ...missing,
+    ...invalid.map(item => item.id),
+    ...untranslated.map(item => item.id),
+    ...duplicatesInSource.map(item => item.id)
+  ]);
+  const translated = extractedIds.size - missing.length;
+  const valid = extractedIds.size - flagged.size;
   return {
-    complete: missing.length === 0 && invalid.length === 0,
-    missing,
-    invalid,
-    unknown,
-    translated: extractedIds.size - missing.length,
+    complete: flagged.size === 0,
+    missing, invalid, untranslated, duplicates: duplicatesInSource,
+    unknown, translated, valid,
     total: extractedIds.size
   };
 }
@@ -1389,36 +1472,103 @@ function formatIds(ids, limit = 40) {
     : shown;
 }
 
+function getRepairIssues(result) {
+  const issues = [];
+  for (const id of result.missing) issues.push({ id, type: "Missing", error: "Translation not supplied." });
+  for (const item of result.invalid) issues.push({ id: item.id, type: "Invalid highlight", error: item.error });
+  for (const item of result.untranslated) issues.push({ id: item.id, type: "Untranslated text", error: item.error });
+  const existingIssues = new Map(issues.map(issue => [issue.id, issue]));
+  for (const item of result.duplicates) {
+    const existing = existingIssues.get(item.id);
+    if (existing) {
+      existing.previous = item.previous;
+    } else {
+      issues.push({
+        id: item.id, type: "Conflicting duplicate",
+        error: "More than one nonidentical translation was supplied; the latest overrides earlier text.",
+        previous: item.previous
+      });
+    }
+  }
+  return issues.sort((a, b) => a.id - b.id);
+}
+
+function renderRepairPanel(result, tmap) {
+  const panel = document.getElementById("repairPanel");
+  const issues = getRepairIssues(result);
+  if (!issues.length) {
+    panel.hidden = true;
+    return;
+  }
+  panel.hidden = false;
+  document.getElementById("repairHeading").textContent =
+    `${issues.length} text unit${issues.length === 1 ? "" : "s"} need repair or review`;
+  document.getElementById("btnKeepLatest").hidden = result.duplicates.length === 0;
+  const list = document.getElementById("repairIssueList");
+  list.replaceChildren();
+  const fragment = document.createDocumentFragment();
+  for (const issue of issues) {
+    const card = document.createElement("div");
+    card.className = "repair-issue";
+    const head = document.createElement("div");
+    head.className = "repair-issue-head";
+    const id = document.createElement("strong");
+    id.textContent = `ID ${issue.id}`;
+    const reason = document.createElement("span");
+    reason.textContent = `${issue.type}: ${issue.error}`;
+    head.append(id, reason);
+    card.appendChild(head);
+    const info = [
+      ["Source", extractedSource.get(issue.id) || "(Source not available)"],
+      ...(issue.previous != null ? [["Earlier version", issue.previous]] : []),
+      ["Current (latest)", tmap.get(issue.id) || "(No translation)"]
+    ];
+    for (const [label, value] of info) {
+      const line = document.createElement("div");
+      line.className = "repair-issue-line";
+      const prefix = document.createElement("strong");
+      prefix.textContent = `${label}: `;
+      const code = document.createElement("code");
+      code.textContent = value;
+      line.append(prefix, code);
+      card.appendChild(line);
+    }
+    fragment.appendChild(card);
+  }
+  list.appendChild(fragment);
+}
+
 function updateValidationSummary() {
   const el = document.getElementById("validationSummary");
-
+  const panel = document.getElementById("repairPanel");
   if (!officeBuffer || extractedIds.size === 0) {
+    panel.hidden = true;
     el.textContent = "";
     el.className = "validation-summary";
     return;
   }
 
-  const { tmap } = parseTranslationResponse(translatedInput.value);
-
+  const { tmap, duplicates } = parseTranslationResponse(translatedInput.value);
   if (tmap.size === 0) {
+    panel.hidden = true;
     el.textContent = `${extractedIds.size} text units expected.`;
     el.className = "validation-summary";
     return;
   }
 
-  const result = validateTranslation(tmap);
-
+  const result = validateTranslation(tmap, duplicates);
   if (result.complete) {
-    el.textContent = `✓ All ${result.total} text units validated (including DOCX highlights).`;
+    el.textContent = `✓ ${result.valid} / ${result.total} validated · 0 missing · 0 formatting errors · 0 conflicting duplicates`;
+    if (result.unknown.length) el.textContent += ` · ${result.unknown.length} unknown IDs ignored`;
     el.className = "validation-summary ok";
   } else {
-    el.textContent =
-      `${result.translated} / ${result.total} translated · `
-      + `${result.missing.length} missing`
-      + (result.invalid.length ? ` · ${result.invalid.length} invalid highlight markup` : "");
-
+    el.textContent = `${result.valid} / ${result.total} validated · `
+      + `${result.missing.length} missing · ${result.invalid.length} invalid highlight markup · `
+      + `${result.untranslated.length} untranslated text · ${result.duplicates.length} conflicting duplicates`;
+    if (result.unknown.length) el.textContent += ` · ${result.unknown.length} unknown IDs ignored`;
     el.className = "validation-summary err";
   }
+  renderRepairPanel(result, tmap);
 }
 
 function showMissingWarning(result) {
@@ -1470,9 +1620,51 @@ IMPORTANT:
   original color and literal tag pair exactly once, wrapping the corresponding
   translated English phrase (tags may move with natural English word order).
   Never omit, escape, invent, duplicate or nest <hl> tags.
+- If a highlighted segment contains only whitespace, preserve that whitespace
+  exactly inside its tag; it does not need translation.
 
 MISSING SOURCE TEXT:
 ${sourceLines.join("\n")}`;
+}
+
+function buildRepairPrompt(issues) {
+  const rows = issues.filter(issue => extractedSource.has(issue.id))
+    .map(issue => `${issue.id}|${extractedSource.get(issue.id)}`);
+  return `Repair the following missing, incorrectly highlighted, or untranslated text units.
+
+Translate each entire source unit into polished, publication-quality English.
+Return ONLY id|English translation lines, with the exact supplied numeric IDs.
+Do not include FILENAME or any heading. Do not add extra lines or use a pipe in the text.
+Preserve all <hl id="N" color="COLOR">...</hl> tags literally, exactly once per ID,
+without nesting or escaping, but move tagged phrases where natural English requires.
+IMPORTANT: A highlight containing only whitespace must retain that whitespace
+exactly between its <hl> and </hl> tags; it is formatting, not a missing translation.
+
+SOURCE UNITS TO REPLACE:
+${rows.join("\n")}`;
+}
+
+// Replace the actual lines instead of just appending another duplicate ID.
+function replaceTranslationLines(raw, replacements) {
+  const used = new Set();
+  const lines = [];
+  for (const line of raw.split(/\r?\n/)) {
+    const m = /^\s*(\d+)\s*\|/.exec(line);
+    if (!m || !replacements.has(Number(m[1]))) {
+      lines.push(line);
+      continue;
+    }
+    const id = Number(m[1]);
+    if (!used.has(id)) {
+      lines.push(`${id}|${replacements.get(id)}`);
+      used.add(id);
+    }
+    // Discard older duplicate lines for replaced IDs.
+  }
+  for (const [id, value] of replacements) {
+    if (!used.has(id)) lines.push(`${id}|${value}`);
+  }
+  return lines.join("\n").trim();
 }
 
 async function copyText(text) {
@@ -1610,11 +1802,12 @@ function docxMarkedParagraph(para, group, stylesInfo) {
 
     if (color && !current) {
       const id = nextMarker++;
-      current = { id, color, run };
+      current = { id, color, run, sourceText: "" };
       descriptors.set(id, current);
       source += `<hl id="${id}" color="${color}">`;
     }
     source += textEl.textContent;
+    if (current) current.sourceText += textEl.textContent;
     previousRun = run;
     previousSignature = signature;
   }
@@ -1629,9 +1822,19 @@ function parseDocxMarkedTranslation(translated, descriptors) {
   const chunks = [];
   const seen = new Set();
   const tags = /<\/?hl\b[^>]*>/gi;
+  // Only whitespace-only SOURCE highlights may retain whitespace-only English.
+  // Normal highlighted words must still contain translated, non-space text.
+  const allowedWhitespace = (id, content) => {
+    const original = descriptors.get(id)?.sourceText;
+    return typeof original === "string" && original.length > 0
+      && !original.trim() && content.length > 0 && !content.trim();
+  };
   const push = (text, highlightId) => {
     if (!text) return;
-    if (open && text.trim()) open.hasContent = true;
+    if (open) {
+      open.text += text;
+      if (text.trim()) open.hasContent = true;
+    }
     const last = chunks[chunks.length - 1];
     if (last && last.highlightId === highlightId) last.text += text;
     else chunks.push({ text, highlightId });
@@ -1650,7 +1853,9 @@ function parseDocxMarkedTranslation(translated, descriptors) {
     const tag = match[0];
     if (/^<\/hl\s*>$/i.test(tag)) {
       if (!open) throw new Error("Unexpected </hl> closing tag.");
-      if (!open.hasContent) throw new Error(`Highlight ${open.id} has no translated text.`);
+      if (!open.hasContent && !allowedWhitespace(open.id, open.text)) {
+        throw new Error(`Highlight ${open.id} has no translated text.`);
+      }
       seen.add(open.id);
       open = null;
     } else {
@@ -1664,7 +1869,7 @@ function parseDocxMarkedTranslation(translated, descriptors) {
       if (spec.color.toLowerCase() !== parsed[2].toLowerCase()) {
         throw new Error(`Highlight ${id} must keep its original ${spec.color} color.`);
       }
-      open = { id, hasContent: false };
+      open = { id, text: "", hasContent: false };
     }
     cursor = tags.lastIndex;
   }
@@ -1677,8 +1882,9 @@ function parseDocxMarkedTranslation(translated, descriptors) {
   for (const [id] of descriptors) {
     if (!seen.has(id)) throw new Error(`Original highlight ID ${id} is missing.`);
   }
-  if (chunks.some(c => c.highlightId !== null && !c.text.trim())) {
-    throw new Error("A highlight tag may not contain only whitespace.");
+  if (chunks.some(c => c.highlightId !== null && !c.text.trim()
+    && !allowedWhitespace(c.highlightId, c.text))) {
+    throw new Error("A highlight tag may not contain only whitespace unless the source does too.");
   }
   return chunks;
 }
@@ -2223,6 +2429,9 @@ function setFile(f) {
     dz.classList.add("filled");
 
     translatedInput.value = "";
+    document.getElementById("repairInput").value = "";
+    document.getElementById("repairPanel").hidden = true;
+    setStatus("repairStatus", "");
     outputFilename.value = "";
 
     document.getElementById("btnExtract").disabled = false;
@@ -2343,6 +2552,70 @@ document.getElementById("btnCopyMissing").addEventListener("click", async () => 
   }
 });
 
+document.getElementById("btnCopyRepair").addEventListener("click", async () => {
+  const { tmap, duplicates } = parseTranslationResponse(translatedInput.value);
+  const issues = getRepairIssues(validateTranslation(tmap, duplicates));
+  if (!issues.length) return;
+  try {
+    await copyText(buildRepairPrompt(issues));
+    setStatus("repairStatus", `✓ Copied a repair prompt for ${issues.length} IDs.`, "ok");
+  } catch (e) {
+    setStatus("repairStatus", `Cannot copy: ${e.message}`, "err");
+  }
+});
+
+document.getElementById("btnApplyRepair").addEventListener("click", () => {
+  const repairInput = document.getElementById("repairInput");
+  const { tmap: patches } = parseTranslationResponse(repairInput.value);
+  const { tmap: existing, duplicates } = parseTranslationResponse(translatedInput.value);
+  const issueIds = new Set(getRepairIssues(validateTranslation(existing, duplicates)).map(item => item.id));
+  const accepted = new Map();
+  const rejected = [];
+  for (const [id, value] of patches) {
+    if (!extractedIds.has(id)) {
+      rejected.push(`${id} (unknown ID)`);
+      continue;
+    }
+    if (!issueIds.has(id)) {
+      rejected.push(`${id} (not currently flagged)`);
+      continue;
+    }
+    try {
+      if (fileKind === "docx") {
+        parseDocxMarkedTranslation(value, extractedDocxMarkers.get(id) || new Map());
+      }
+      if (hasChinese(value)) throw new Error("Chinese characters remain");
+      accepted.set(id, value);
+    } catch (e) {
+      rejected.push(`${id} (${e.message})`);
+    }
+  }
+  if (!accepted.size) {
+    setStatus("repairStatus", rejected.length
+      ? `No replacements accepted: ${rejected.join("; ")}`
+      : "Paste ID|translation lines to apply a repair.", "err");
+    return;
+  }
+  translatedInput.value = replaceTranslationLines(translatedInput.value, accepted);
+  repairInput.value = "";
+  translatedInput.dispatchEvent(new Event("input", { bubbles: true }));
+  const report = `✓ Replaced ${accepted.size} translation${accepted.size === 1 ? "" : "s"}.`
+    + (rejected.length ? ` Skipped: ${rejected.join("; ")}` : "");
+  setStatus("s2", report, rejected.length ? "err" : "ok");
+  if (!document.getElementById("repairPanel").hidden) {
+    setStatus("repairStatus", report, rejected.length ? "err" : "ok");
+  }
+});
+
+document.getElementById("btnKeepLatest").addEventListener("click", () => {
+  const { tmap, duplicates } = parseTranslationResponse(translatedInput.value);
+  if (!duplicates.length) return;
+  const replacements = new Map(duplicates.map(({id}) => [id, tmap.get(id)]));
+  translatedInput.value = replaceTranslationLines(translatedInput.value, replacements);
+  translatedInput.dispatchEvent(new Event("input", { bubbles: true }));
+  setStatus("s2", `Confirmed latest translation for ${replacements.size} duplicate IDs. Earlier conflicting lines removed.`, "ok");
+});
+
 document.getElementById("btnBack").addEventListener("click", () => {
   hideMissingWarning();
   resetIncompleteApproval();
@@ -2458,7 +2731,7 @@ async function doBuild() {
     return;
   }
 
-  const { filename, tmap } = parseTranslationResponse(translated);
+  const { filename, tmap, duplicates } = parseTranslationResponse(translated);
 
   if (tmap.size === 0) {
     setStatus(
@@ -2469,14 +2742,14 @@ async function doBuild() {
     return;
   }
 
-  const result = validateTranslation(tmap);
+  const result = validateTranslation(tmap, duplicates);
 
-  // Invalid highlight tags are not the same as missing translations.
-  // Do not let "Continue anyway" silently strip or misplace formatting.
-  if (result.invalid.length) {
-    const first = result.invalid[0];
-    setStatus("s2", `Highlight markup error at ID ${first.id}: ${first.error}`
-      + (result.invalid.length > 1 ? ` (+${result.invalid.length - 1} more)` : ""), "err");
+  // Highlight corruption or leftover Chinese is never silently accepted.
+  // Every affected unit has already been listed in the inline repair panel.
+  if (result.invalid.length || result.untranslated.length || result.duplicates.length) {
+    const totalBad = getRepairIssues(result).length;
+    setStatus("s2", `${totalBad} units require repair/review. Check the affected IDs, then apply replacements or explicitly keep the latest duplicate versions.`, "err");
+    document.getElementById("repairPanel").scrollIntoView({ behavior: "smooth", block: "nearest" });
     return;
   }
 
