@@ -998,8 +998,8 @@ textarea:focus, .text-input:focus {
 
     <div class="hint">
       You can append multiple AI responses. Blank lines are ignored, and
-      the last nonempty translation for each ID wins. For damaged lines, use the
-      repair panel below to replace an ID directly instead of duplicating it.
+      the last nonempty translation for each ID wins. For damaged lines,
+      repair tools appear automatically only when needed.
     </div>
 
     <label class="field-label" for="outputFilename">
@@ -1169,7 +1169,7 @@ textarea:focus, .text-input:focus {
             <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8"/><path d="M9 3v3h6V3"/><rect x="5" y="5" width="14" height="16" rx="2"/><path d="m9 14 2 2 4-5"/></svg>
             Translation matching
           </strong>
-          <p>Every text unit has a numeric ID. For Word, highlighted phrases also carry protected inline IDs to preserve their positions after translation.</p>
+          <p>Every text unit has a numeric ID. For Word, highlighted phrases use protected plain-text ID markers to preserve their positions after translation.</p>
         </div>
 
         <div class="guide-detail">
@@ -1177,7 +1177,7 @@ textarea:focus, .text-input:focus {
             <svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 7v5c0 5 3.4 8 8 9 4.6-1 8-4 8-9V7l-8-4Z"/><path d="m9 12 2 2 4-4"/></svg>
             Formatting preserved
           </strong>
-          <p>Word highlights are carried through protected AI tags and validated before reconstruction; other Office formatting is retained wherever possible.</p>
+          <p>Word highlights use protected plain-text markers and are validated before reconstruction; other Office formatting is retained wherever possible.</p>
         </div>
       </div>
 
@@ -1267,21 +1267,46 @@ CAPITALIZATION:
 SOURCE TEXT:
 `;
 
-// The highlight tags are a transport format for AI, NOT HTML content in Word.
-// IDs are local to each paragraph. Colors and IDs are verified against the original.
+// Plain-text markers avoid HTML/XML-like syntax in AI output.
+// A distinct numeric ID is necessary when the same color occurs repeatedly.
+// Colors are derived from the original Word file, NEVER from model guesses.
 const DOCX_MARKUP_INSTRUCTIONS = `DOCX HIGHLIGHT PRESERVATION (IMPORTANT):
-- Some DOCX lines contain inline tags like <hl id="1" color="yellow">發炎反應</hl>.
-- These tags mark exactly which source phrases are highlighted in Word.
-- Translate the WHOLE numbered paragraph naturally; the highlighted English phrase may move anywhere in the translated sentence to preserve natural English word order.
-- Keep each opening <hl id="N" color="COLOR"> and closing </hl> tag as literal markup, including its exact ID and color. Do not escape the tags (no &lt; or &gt;), alter their attributes, omit them, duplicate them, or invent new ones.
-- Wrap the English words that express the original highlighted meaning. Never translate the tags themselves, and do not nest tags.
-- Include each source highlight ID exactly once per line, even when several highlighted phrases have the same color.
-- If a source highlight contains ONLY a space or other whitespace, keep its whitespace inside the original <hl>...</hl> tags unchanged. Such a tag preserves Word spacing and is NOT untranslated content. Do not remove the whitespace.
-- For paragraphs with no <hl> tags, do not add any.
-- Return plain id|English text lines, NOT Markdown/code fences. Preserve all tags in continuation responses too.
-- If Word has split one word into multiple neighboring highlight IDs, you may distribute the translated word across those tags. Do not erase short single-letter tags or replace content with empty tags.
+- Word highlighting is represented by SHORT PLAIN-TEXT TOKENS, not HTML.
+- Example: @y1-st@發炎反應@y1-end@ means that source phrase is yellow-highlighted.
+- In @y1-st@, y is the original highlight color and 1 is a local phrase ID.
+- Other colors use similarly short codes (e.g. @g2-st@...@g2-end@).
+- Each numbered paragraph is ONE natural English translation unit.
+- Translate the WHOLE paragraph naturally. A tagged phrase may move to match natural English word order.
+- In your output, keep EVERY original marker pair unchanged: the exact color code, numeric ID, -st and -end.
+- Place its opening and closing markers around the English words conveying the original highlighted meaning.
+- IMPORTANT: Do not delete, invent, duplicate, combine, rename, nest, HTML-escape, or translate tokens.
+- A highlighted phrase may comprise several English words. Keep the entire phrase inside ONE pair.
+- If Word split a phrase into neighboring text runs, the provided input already consolidates adjacent runs with the same highlight color.
+- Formatting-only spaces are handled automatically by the app; do not invent markers around spaces.
+- Do not use HTML, Markdown formatting, or code fences. Return raw id|English lines only.
+- Complete all supplied IDs in one response. Review the marker pairs on each line before finishing.
 
 `;
+
+// WordprocessingML standard highlight values. Unknown Word color values get
+// reversible alphabetic codes so they are not silently recolored.
+const DOCX_COLOR_CODES = new Map([
+  ["yellow", "y"], ["green", "g"], ["cyan", "c"],
+  ["magenta", "m"], ["blue", "b"], ["red", "r"],
+  ["darkyellow", "dy"], ["darkgreen", "dg"], ["darkcyan", "dc"],
+  ["darkmagenta", "dm"], ["darkblue", "db"], ["darkred", "dr"],
+  ["darkgray", "dgr"], ["lightgray", "lg"], ["black", "bk"],
+  ["white", "wh"]
+]);
+
+function docxMarkerCode(color) {
+  const value = String(color || "").toLowerCase();
+  return DOCX_COLOR_CODES.get(value) || "color" + value.replace(/[^a-z]/g, "");
+}
+
+function docxToken(code, id, part) {
+  return `@${code}${id}-${part}@`;
+}
 
 // ── State ────────────────────────────────────────────────────────────────────
 
@@ -1386,25 +1411,32 @@ function setPptxOptionsLocked(locked) {
   document.getElementById("enableAutofit").disabled = locked;
 }
 
-// Repair only syntactic differences that can be unambiguously normalized.
-// Never infer English meaning or invent missing nonempty highlights.
+// Backward compatibility: accept correctly-formed old <hl> translations.
+// Only the transport notation changes; users need not redo sound translations.
+// Malformed legacy tags are deliberately NOT guessed or discarded.
 function normalizeHighlightSyntax(raw) {
   let text = String(raw ?? "");
-  // AI sometimes HTML-escapes just the protected tags.
   text = text.replace(/&lt;(\/?hl\b[\s\S]*?)&gt;/gi,
     (_, tag) => "<" + tag.replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'") + ">");
-  text = text.replace(/<hl\b([^>]*)>/gi, (whole, attributes) => {
-    const id = /\bid\s*=\s*(["'])(\d+)\1/i.exec(attributes);
-    const color = /\bcolor\s*=\s*(["'])([a-zA-Z]+)\1/i.exec(attributes);
-    if (!id || !color) return whole;
-    const remaining = attributes
-      .replace(id[0], "")
-      .replace(color[0], "")
-      .trim();
-    if (remaining) return whole; // Unexpected attributes should be reviewed.
-    return `<hl id="${Number(id[2])}" color="${color[2].toLowerCase()}">`;
+  const tags = /<\/?hl\b[^>]*>/gi;
+  let open = null;
+  return text.replace(tags, tag => {
+    if (/^<\/hl\s*>$/i.test(tag)) {
+      if (!open) return tag;
+      const closing = docxToken(open.code, open.id, "end");
+      open = null;
+      return closing;
+    }
+    const attrs = /^<hl\s+([^>]*)>$/i.exec(tag);
+    if (!attrs || open) return tag;
+    const id = /\bid\s*=\s*["'](\d+)["']/i.exec(attrs[1]);
+    const color = /\bcolor\s*=\s*["']([a-zA-Z]+)["']/i.exec(attrs[1]);
+    if (!id || !color) return tag;
+    const other = attrs[1].replace(id[0], "").replace(color[0], "").trim();
+    if (other) return tag;
+    open = { id: Number(id[1]), code: docxMarkerCode(color[1]) };
+    return docxToken(open.code, open.id, "st");
   });
-  return text.replace(/<\/hl\s*>/gi, "</hl>");
 }
 
 function parseTranslationResponse(raw) {
@@ -1584,14 +1616,14 @@ function updateValidationSummary() {
 
   const result = validateTranslation(tmap, duplicates);
   if (result.complete) {
-    el.textContent = `✓ ${result.valid} / ${result.total} validated · 0 missing · 0 formatting errors · 0 conflicting duplicates`;
-    if (result.unknown.length) el.textContent += ` · ${result.unknown.length} unknown IDs ignored`;
+    el.textContent = `✓ ${result.valid} / ${result.total} validated · 0 missing · 0 marker errors · 0 conflicting duplicates`;
+    if (result.unknown.length) el.textContent += ` · ${result.unknown.length} unknown IDs ignored (IDs: ${formatIds(result.unknown, 12)})`;
     el.className = "validation-summary ok";
   } else {
     el.textContent = `${result.valid} / ${result.total} validated · `
-      + `${result.missing.length} missing · ${result.invalid.length} invalid highlight markup · `
+      + `${result.missing.length} missing · ${result.invalid.length} invalid highlight markers · `
       + `${result.untranslated.length} untranslated text · ${result.duplicates.length} conflicting duplicates`;
-    if (result.unknown.length) el.textContent += ` · ${result.unknown.length} unknown IDs ignored`;
+    if (result.unknown.length) el.textContent += ` · ${result.unknown.length} unknown IDs ignored (IDs: ${formatIds(result.unknown, 12)})`;
     el.className = "validation-summary err";
   }
   renderRepairPanel(result, tmap);
@@ -1621,53 +1653,42 @@ function showMissingWarning(result) {
   panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
-// Build a continuation prompt containing the actual missing source units.
-function buildMissingPrompt(missingIds) {
-  const sourceLines = missingIds
-    .filter(id => extractedSource.has(id))
+// Use the SAME translation rules for full, missing and targeted repair prompts.
+function promptForSubset(title, ids) {
+  const rows = ids.filter(id => extractedSource.has(id))
     .map(id => `${id}|${extractedSource.get(id)}`);
+  return `${title}
 
-  return `Continue translating the missing text units below.
+` +
+    `Translate every supplied numbered unit into natural, publication-quality English.
+` +
+    `Preserve its numeric ID and return only complete id|English text lines; do not add FILENAME.
+` +
+    `Do not use code fences, comments, headings, pipes inside translations, or extra lines.
+` +
+    `If the source has @y1-st@...@y1-end@ or other @CODE-N-st@...@CODE-N-end@ ` +
+    `plain-text highlight markers, keep the EXACT pair for EVERY source highlight.
+` +
+    `Translate and naturally reposition the wrapped phrase; do not omit, duplicate, ` +
+    `invent, nest, escape, or change tokens.
+` +
+    `Formatting-only highlighted spaces are tracked internally and need no markers.
+` +
+    `Return all IDs in one response.
 
-Use the same medical textbook / lecture translation standard as before.
+SOURCE UNITS:
+${rows.join("\n")}`;
+}
 
-IMPORTANT:
-- Translate every supplied unit.
-- Preserve every numeric ID exactly.
-- Return ONLY lines in the format id|English translation.
-- Do not include FILENAME.
-- Do not add explanations, headings, comments, or extra lines.
-- Do not merge or split IDs.
-- Do not insert line breaks within a translated unit.
-- Do not include the pipe character | inside the translated text.
-- If a previous response stopped halfway through a unit, regenerate that entire unit rather than continuing its sentence fragment.
-- Return the complete translation for each ID.
-- If the source contains <hl id="N" color="COLOR">...</hl> markup, preserve each ID,
-  original color and literal tag pair exactly once, wrapping the corresponding
-  translated English phrase (tags may move with natural English word order).
-  Never omit, escape, invent, duplicate or nest <hl> tags.
-- If a highlighted segment contains only whitespace, preserve that whitespace
-  exactly inside its tag; it does not need translation.
-
-MISSING SOURCE TEXT:
-${sourceLines.join("\n")}`;
+function buildMissingPrompt(missingIds) {
+  return promptForSubset("Translate the missing source units below.", missingIds);
 }
 
 function buildRepairPrompt(issues) {
-  const rows = issues.filter(issue => extractedSource.has(issue.id))
-    .map(issue => `${issue.id}|${extractedSource.get(issue.id)}`);
-  return `Repair the following missing, incorrectly highlighted, or untranslated text units.
-
-Translate each entire source unit into polished, publication-quality English.
-Return ONLY id|English translation lines, with the exact supplied numeric IDs.
-Do not include FILENAME or any heading. Do not add extra lines or use a pipe in the text.
-Preserve all <hl id="N" color="COLOR">...</hl> tags literally, exactly once per ID,
-without nesting or escaping, but move tagged phrases where natural English requires.
-IMPORTANT: A highlight containing only whitespace must retain that whitespace
-exactly between its <hl> and </hl> tags; it is formatting, not a missing translation.
-
-SOURCE UNITS TO REPLACE:
-${rows.join("\n")}`;
+  return promptForSubset(
+    "Regenerate these complete units with correct text and highlight markers.",
+    [...new Set(issues.map(issue => issue.id))]
+  );
 }
 
 // Replace the actual lines instead of just appending another duplicate ID.
@@ -1718,13 +1739,23 @@ async function copyText(text) {
 
 // ── DOCX: paragraph-level translation with lossless highlight markers ─────
 
-// Returns all nonempty Word text elements in a paragraph if it contains Chinese.
-// Keep the original paragraph IDs (global position of the first w:t).
+// Read text whose NEAREST containing w:p is this paragraph. Word textboxes
+// can contain nested paragraphs; the old descendant-wide query accidentally
+// counted that text twice, making extraction and build disagree after mutation.
 function docxParaGroup(para) {
   const ts = Array.from(para.getElementsByTagNameNS(W, "t"))
-    .filter(e => e.textContent !== "");
-  if (!ts.length || !hasChinese(ts.map(e => e.textContent).join(""))) return [];
-  return ts;
+    .filter(el => {
+      if (!el.textContent) return false;
+      let parent = el.parentElement;
+      while (parent) {
+        if (parent.namespaceURI === W && parent.localName === "p") {
+          return parent === para;
+        }
+        parent = parent.parentElement;
+      }
+      return false;
+    });
+  return ts.length && hasChinese(ts.map(el => el.textContent).join("")) ? ts : [];
 }
 
 function docxDirectChild(parent, localName) {
@@ -1797,164 +1828,144 @@ function docxHighlightAt(para, textEl, stylesInfo) {
   return value && value !== "none" ? value : null;
 }
 
-// Builds one complete, natural-language translation unit per paragraph.
-// Only highlighted ranges are surrounded by semantic, ID-bearing <hl> tags.
-// The descriptors retain their source run for exact w:rPr reconstruction.
+// Group CONTIGUOUS highlighted text of the same color into one semantic span,
+// even if Word splits it into several differently formatted w:r elements.
+// Whitespace-only spans are NOT sent to the AI: they carry no semantics and
+// are safely reapplied (where a corresponding plain space exists) at rebuild.
 function docxMarkedParagraph(para, group, stylesInfo) {
   const descriptors = new Map();
   let source = "";
   let current = null;
   let nextMarker = 1;
+  let nextWhitespaceMarker = -1;
   let previousRun = null;
-  let previousSignature = null;
-
-  for (const textEl of group) {
-    const run = docxRunOf(textEl);
-    const color = docxHighlightAt(para, textEl, stylesInfo);
-    const rPr = docxDirectChild(run, "rPr");
-    const signature = rPr ? new XMLSerializer().serializeToString(rPr) : "";
-    // Merge adjacent text from identically formatted highlight runs, except
-    // across non-text content such as tabs/line breaks/drawings.
+  const flush = () => {
+    if (!current) return;
+    const desc = current;
+    desc.id = desc.sourceText.trim() ? nextMarker++ : nextWhitespaceMarker--;
+    // No need to ask the model to preserve highlights on pure whitespace.
+    if (desc.sourceText.trim()) {
+      const code = docxMarkerCode(desc.color);
+      desc.code = code;
+      descriptors.set(desc.id, desc);
+      source += docxToken(code, desc.id, "st") + desc.sourceText
+        + docxToken(code, desc.id, "end");
+    } else {
+      // These source spaces will be treated as plain text by the model.
+      // Reapply formatting opportunistically without blocking reconstruction.
+      desc.implicitWhitespace = true;
+      descriptors.set(desc.id, desc);
+      source += desc.sourceText;
+    }
+    current = null;
+  };
+  for (const el of group) {
+    const run = docxRunOf(el);
+    const color = docxHighlightAt(para, el, stylesInfo);
     const continuous = previousRun && run && (
       previousRun === run || previousRun.nextElementSibling === run
     );
-    if (current && (
-      !color || current.color !== color ||
-      previousSignature !== signature || !continuous
-    )) {
-      source += "</hl>";
-      current = null;
+    if (current && (!color || current.color.toLowerCase() !== color.toLowerCase() || !continuous)) {
+      flush();
     }
-
-    if (color && !current) {
-      const id = nextMarker++;
-      current = { id, color, run, sourceText: "" };
-      descriptors.set(id, current);
-      source += `<hl id="${id}" color="${color}">`;
+    if (color) {
+      if (!current) current = {
+        id: null, color, run, sourceText: "", implicitWhitespace: false
+      };
+      current.sourceText += el.textContent;
+    } else {
+      source += el.textContent;
     }
-    source += textEl.textContent;
-    if (current) current.sourceText += textEl.textContent;
     previousRun = run;
-    previousSignature = signature;
   }
-  if (current) source += "</hl>";
+  flush();
   return { source, descriptors };
 }
 
-// Returns text segments {text, highlightId}. Rejects damaged, duplicated or
-// invented tags BEFORE altering the original DOCX. It is safer to require
-// regenerating one translation than silently discard a highlight.
-function parseDocxMarkedTranslation(translated, descriptors) {
-  translated = normalizeHighlightSyntax(translated);
+// Single canonical parser for live validation, repair acceptance, and DOCX
+// construction. It refuses missing, nested, duplicated, mismatched or
+// malformed semantic markers BEFORE any Word XML is modified.
+function parseDocxMarkedTranslation(translation, descriptors) {
+  const translated = normalizeHighlightSyntax(translation);
   const chunks = [];
   const seen = new Set();
-  const tags = /<\/?hl\b[^>]*>/gi;
-  // Only whitespace-only SOURCE highlights may retain whitespace-only English.
-  // Normal highlighted words must still contain translated, non-space text.
-  const allowedWhitespace = (id, content) => {
-    const original = descriptors.get(id)?.sourceText;
-    return typeof original === "string" && original.length > 0
-      && !original.trim() && content.length > 0 && !content.trim();
-  };
-  const push = (text, highlightId) => {
-    if (!text) return;
-    if (open) {
-      open.text += text;
-      if (text.trim()) open.hasContent = true;
-    }
-    const last = chunks[chunks.length - 1];
-    if (last && last.highlightId === highlightId) last.text += text;
-    else chunks.push({ text, highlightId });
-  };
-
-  let cursor = 0;
+  const tokens = /@([a-z]+)(\d+)-(st|end)@/gi;
   let open = null;
+  let cursor = 0;
+  const push = (text, id) => {
+    if (!text) return;
+    const last = chunks[chunks.length - 1];
+    if (last && last.highlightId === id) last.text += text;
+    else chunks.push({ text, highlightId: id });
+  };
+  const assertPlain = value => {
+    if (/<\/?hl\b|&lt;\/?hl\b/i.test(value) ||
+        /@[a-z][a-z0-9-]*@/i.test(value)) {
+      throw new Error("Malformed or unrecognized highlight marker in translation.");
+    }
+  };
   let match;
-  while ((match = tags.exec(translated)) !== null) {
+  while ((match = tokens.exec(translated)) !== null) {
     const between = translated.slice(cursor, match.index);
-    // A partial/escaped tag is a broken AI output, not literal translated text.
-    if (/<\/?hl\b|&lt;\/?hl\b/i.test(between)) {
-      throw new Error("Malformed or HTML-escaped highlight tag.");
-    }
+    assertPlain(between);
     push(between, open ? open.id : null);
-    const tag = match[0];
-    if (/^<\/hl\s*>$/i.test(tag)) {
-      if (!open) throw new Error("Unexpected </hl> closing tag.");
-      if (!open.hasContent && !allowedWhitespace(open.id, open.text)) {
-        throw new Error(`Highlight ${open.id} has no translated text.`);
-      }
-      seen.add(open.id);
-      open = null;
-    } else {
-      if (open) throw new Error("Nested <hl> tags are not allowed.");
-      const parsed = /^<hl\s+id="(\d+)"\s+color="([a-zA-Z]+)"\s*>$/i.exec(tag);
-      if (!parsed) throw new Error(`Invalid tag syntax: ${tag}`);
-      const id = Number(parsed[1]);
-      const spec = descriptors.get(id);
-      if (!spec) throw new Error(`Unexpected highlight ID ${id}.`);
-      if (seen.has(id)) throw new Error(`Highlight ID ${id} is duplicated.`);
-      if (spec.color.toLowerCase() !== parsed[2].toLowerCase()) {
-        throw new Error(`Highlight ${id} must keep its original ${spec.color} color.`);
-      }
-      open = { id, text: "", hasContent: false };
+    const code = match[1].toLowerCase();
+    const id = Number(match[2]);
+    const part = match[3].toLowerCase();
+    const spec = descriptors.get(id);
+    if (!spec || spec.implicitWhitespace) {
+      throw new Error(`Unexpected highlight marker ${match[0]}.`);
     }
-    cursor = tags.lastIndex;
+    if (docxMarkerCode(spec.color) !== code) {
+      throw new Error(`Highlight ${id} must keep its original color code.`);
+    }
+    if (part === "st") {
+      if (open) throw new Error(`Nested or unclosed highlight ${open.id}.`);
+      if (seen.has(id)) throw new Error(`Duplicate highlight ID ${id}.`);
+      open = { id, startIndex: chunks.length };
+    } else {
+      if (!open || open.id !== id) {
+        throw new Error(`Unexpected or mismatched highlight closing marker ${match[0]}.`);
+      }
+      const inner = chunks.slice(open.startIndex)
+        .filter(chunk => chunk.highlightId === id)
+        .map(chunk => chunk.text).join("");
+      if (!inner.trim()) {
+        throw new Error(`Highlight ${id} has no translated text.`);
+      }
+      seen.add(id);
+      open = null;
+    }
+    cursor = tokens.lastIndex;
   }
   const tail = translated.slice(cursor);
-  if (/<\/?hl\b|&lt;\/?hl\b/i.test(tail)) {
-    throw new Error("Malformed or HTML-escaped highlight tag.");
-  }
+  assertPlain(tail);
   push(tail, open ? open.id : null);
-  if (open) throw new Error(`Highlight ${open.id} is missing its closing </hl> tag.`);
+  if (open) throw new Error(`Highlight ${open.id} is missing its closing marker.`);
   for (const [id, spec] of descriptors) {
-    if (seen.has(id)) continue;
-    const sourceWhitespace = spec.sourceText || "";
-    // A whitespace-only highlight is formatting, not a missing word.
-    // Restore it around an existing plain whitespace without inserting text.
-    if (sourceWhitespace && !sourceWhitespace.trim()) {
-      const originalIds = [...descriptors.keys()];
-      const at = originalIds.indexOf(id);
-      const neighborIds = originalIds.filter((other, index) =>
-        index !== at && seen.has(other) && Math.abs(index - at) <= 1
-      );
-      const candidates = [];
-      chunks.forEach((chunk, index) => {
-        if (chunk.highlightId !== null) return;
-        let offset = chunk.text.indexOf(sourceWhitespace);
-        let length = sourceWhitespace.length;
-        if (offset < 0 && /^\s+$/.test(sourceWhitespace)) {
-          offset = chunk.text.search(/\s/);
-          length = 1;
-        }
-        if (offset < 0) return;
-        let proximity = 10000;
-        for (const neighbor of neighborIds) {
-          chunks.forEach((other, j) => {
-            if (other.highlightId === neighbor) proximity = Math.min(proximity, Math.abs(index - j));
-          });
-        }
-        candidates.push({ index, offset, length, proximity });
-      });
-      candidates.sort((a, b) => a.proximity - b.proximity || a.index - b.index);
-      if (candidates.length) {
-        const { index, offset, length } = candidates[0];
-        const original = chunks[index].text;
-        const additions = [];
-        if (offset) additions.push({ text: original.slice(0, offset), highlightId: null });
-        additions.push({ text: original.slice(offset, offset + length), highlightId: id });
-        if (offset + length < original.length) {
-          additions.push({ text: original.slice(offset + length), highlightId: null });
-        }
-        chunks.splice(index, 1, ...additions);
-        seen.add(id);
-        continue;
-      }
+    if (!spec.implicitWhitespace && !seen.has(id)) {
+      throw new Error(`Original highlight ID ${id} is missing.`);
     }
-    throw new Error(`Original highlight ID ${id} is missing.`);
   }
-  if (chunks.some(c => c.highlightId !== null && !c.text.trim()
-    && !allowedWhitespace(c.highlightId, c.text))) {
-    throw new Error("A highlight tag may not contain only whitespace unless the source does too.");
+  // Nonsemantic highlights on pure source whitespace are best effort only.
+  // Never synthesize extra visible words, or abort a valid translation for them.
+  for (const [id, spec] of descriptors) {
+    if (!spec.implicitWhitespace) continue;
+    const sourceSpace = spec.sourceText;
+    const candidate = chunks.findIndex(c => c.highlightId === null && /\s/.test(c.text));
+    if (candidate < 0) continue;
+    const chunk = chunks[candidate];
+    let offset = chunk.text.indexOf(sourceSpace);
+    let length = sourceSpace.length;
+    if (offset < 0) { offset = chunk.text.search(/\s/); length = 1; }
+    if (offset < 0) continue;
+    const replacements = [];
+    if (offset) replacements.push({ text: chunk.text.slice(0, offset), highlightId: null });
+    replacements.push({ text: chunk.text.slice(offset, offset + length), highlightId: id });
+    if (offset + length < chunk.text.length) {
+      replacements.push({ text: chunk.text.slice(offset + length), highlightId: null });
+    }
+    chunks.splice(candidate, 1, ...replacements);
   }
   return chunks;
 }
@@ -2083,43 +2094,53 @@ async function extractDocx(buffer) {
   };
 }
 
+// Two-phase DOCX build: collect/validate ALL units from the unmodified XML,
+// then apply the replacements. No earlier edit may change a later paragraph's
+// marker analysis or its text IDs (including nested textboxes).
 async function buildDocxTranslated(buffer, tmap) {
   const zip = await JSZip.loadAsync(buffer);
   const stylesInfo = await docxHighlightStyles(zip);
   let globalIdx = 0;
   let replacedTotal = 0;
-
+  const plans = [];
   for (const part of DOCX_SCAN_PARTS) {
     if (!zip.files[part]) continue;
     const doc = parseXml(await zip.files[part].async("string"));
     const allT = Array.from(doc.getElementsByTagNameNS(W, "t"));
     const posOf = new Map(allT.map((e, i) => [e, i]));
-    let replaced = 0;
-
-    for (const para of doc.getElementsByTagNameNS(W, "p")) {
+    const changes = [];
+    for (const para of Array.from(doc.getElementsByTagNameNS(W, "p"))) {
       const group = docxParaGroup(para);
       if (!group.length) continue;
       const firstPos = posOf.get(group[0]);
       if (firstPos === undefined) continue;
-      const gi = globalIdx + firstPos;
-      if (!tmap.has(gi)) continue;
-      const { descriptors } = docxMarkedParagraph(para, group, stylesInfo);
+      const id = globalIdx + firstPos;
+      if (!tmap.has(id)) continue;
+      const { source, descriptors } = docxMarkedParagraph(para, group, stylesInfo);
+      // Hard check that the source which will be written is exactly the source
+      // that was validated. A mismatch indicates a document/parser issue,
+      // NOT a request for the AI to hallucinate highlight markup.
+      if (extractedSource.get(id) !== source) {
+        throw new Error(`Paragraph ID ${id}: source changed since extraction. Re-extract the file.`);
+      }
       let chunks;
       try {
-        chunks = parseDocxMarkedTranslation(tmap.get(gi), descriptors);
+        chunks = parseDocxMarkedTranslation(tmap.get(id), descriptors);
       } catch (e) {
-        throw new Error(`Paragraph ID ${gi}: ${e.message}`);
+        throw new Error(`Paragraph ID ${id}: ${e.message}`);
       }
-      docxReplaceMarkedParagraph(doc, para, group, descriptors, chunks);
-      replaced++;
+      changes.push({ para, group, descriptors, chunks });
     }
+    plans.push({ part, doc, changes });
     globalIdx += allT.length;
-    if (replaced > 0) {
-      zip.file(part, serializeXml(doc));
-      replacedTotal += replaced;
-    }
   }
-
+  for (const plan of plans) {
+    for (const { para, group, descriptors, chunks } of plan.changes) {
+      docxReplaceMarkedParagraph(plan.doc, para, group, descriptors, chunks);
+      replacedTotal++;
+    }
+    if (plan.changes.length) zip.file(plan.part, serializeXml(plan.doc));
+  }
   await convertDocxNumbering(zip);
   const blob = await zip.generateAsync({
     type: "blob",
